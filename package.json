@@ -1,0 +1,30 @@
+{
+  "name": "tsprojekat",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx hardhat test",
+    "compile": "npx hardhat compile"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.2.3",
+    "@openzeppelin/contracts": "^4.9.6",
+    "@parity/hardhat-polkadot": "^0.1.9",
+    "@types/chai": "^5.2.2",
+    "chai": "^5.3.2",
+    "ethers": "^5.8.0",
+    "hardhat": "^2.26.3",
+    "hardhat-chai-matchers": "^0.0.1",
+    "solc": "0.8.20"
+  },
+  "dependencies": {
+    "@typechain/ethers-v5": "^10.2.1",
+    "axios": "^1.11.0",
+    "typechain": "^8.3.2"
+  }
+}
