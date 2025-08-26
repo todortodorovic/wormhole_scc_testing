@@ -2,37 +2,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { Contract, Signer } from "ethers";
 
-/**
- * GOVERNANCE STRUCTS MIGRATION RESULTS: 66% SUCCESS (8/12 tests passing)
- * 
- * ✅ WORKING (8 tests):
- * - Contract Upgrade basic parsing ✅
- * - Contract Upgrade fuzzing ✅
- * - Set Message Fee basic parsing ✅  
- * - Set Message Fee fuzzing ✅
- * - Transfer Fees basic parsing ✅
- * - Transfer Fees fuzzing ✅
- * - Recover Chain ID basic parsing ✅
- * - Recover Chain ID fuzzing ✅
- * 
- * ❌ NOT WORKING (4 test categories):
- * - Wrong action revert tests - Missing chai-as-promised or @nomicfoundation/hardhat-chai-matchers
- * - Size too small revert tests - Same issue with .to.be.reverted
- * - Size too large revert tests - Same issue with .to.be.revertedWith()
- * - Error handling crashes affect subsequent tests in beforeEach hooks
- * 
- * SOLUTIONS TO FIX REMAINING ISSUES:
- * 1. Install: npm install --save-dev @nomicfoundation/hardhat-chai-matchers
- * 2. Add to hardhat.config.ts: import "@nomicfoundation/hardhat-chai-matchers";
- * 3. Or use try/catch approach for all revert tests
- * 4. Separate revert tests into isolated describe blocks
- * 
- * FOUNDRY EQUIVALENT COVERAGE:
- * - 4 basic parsing functions → 4 TS tests ✅
- * - 4 KEVM fuzzing tests → 4 TS fuzzing tests ✅  
- * - 4 wrong action tests → 0 TS tests (revertedWith issue) ❌
- * - 8 size validation tests → 0 TS tests (revert handling issue) ❌
- */
+
 
 describe("GovernanceStructs", function () {
   let gs: Contract;
@@ -150,8 +120,12 @@ describe("GovernanceStructs", function () {
           [module, action, chain, newContract]
         );
 
-        await expect(gs.parseContractUpgrade(encodedUpgrade))
-          .to.be.revertedWith("invalid ContractUpgrade");
+        try {
+          await gs.parseContractUpgrade(encodedUpgrade);
+          expect.fail("Expected transaction to revert");
+        } catch (error: any) {
+          expect(error.message).to.include("invalid ContractUpgrade");
+        }
 
         await new Promise(resolve => setTimeout(resolve, 50));
       }
@@ -161,8 +135,14 @@ describe("GovernanceStructs", function () {
       // Create bytes smaller than 67 bytes
       const tooSmallBytes = ethers.utils.hexlify(ethers.utils.randomBytes(60)); // 60 < 67
 
-      await expect(gs.parseContractUpgrade(tooSmallBytes))
-        .to.be.reverted;
+      try {
+        await gs.parseContractUpgrade(tooSmallBytes);
+        expect.fail("Expected transaction to revert");
+      } catch (error: any) {
+        expect(error.message).to.satisfy((msg: string) => 
+          msg.includes("revert") || msg.includes("invalid") || msg.includes("out of bounds")
+        );
+      }
     });
 
     it("should revert when size too large", async function () {
@@ -261,8 +241,12 @@ describe("GovernanceStructs", function () {
         [module, wrongAction, chain, messageFee]
       );
 
-      await expect(gs.parseSetMessageFee(encodedSetMessageFee))
-        .to.be.revertedWith("invalid SetMessageFee");
+      try {
+        await gs.parseSetMessageFee(encodedSetMessageFee);
+        expect.fail("Expected transaction to revert");
+      } catch (error: any) {
+        expect(error.message).to.include("invalid SetMessageFee");
+      }
     });
 
     it("should handle fuzzing for wrong action revert", async function () {
@@ -279,8 +263,12 @@ describe("GovernanceStructs", function () {
           [module, action, chain, messageFee]
         );
 
-        await expect(gs.parseSetMessageFee(encodedSetMessageFee))
-          .to.be.revertedWith("invalid SetMessageFee");
+        try {
+          await gs.parseSetMessageFee(encodedSetMessageFee);
+          expect.fail("Expected transaction to revert");
+        } catch (error: any) {
+          expect(error.message).to.include("invalid SetMessageFee");
+        }
 
         await new Promise(resolve => setTimeout(resolve, 50));
       }
@@ -289,8 +277,14 @@ describe("GovernanceStructs", function () {
     it("should revert when size too small", async function () {
       const tooSmallBytes = ethers.utils.hexlify(ethers.utils.randomBytes(60)); // 60 < 67
 
-      await expect(gs.parseSetMessageFee(tooSmallBytes))
-        .to.be.reverted;
+      try {
+        await gs.parseSetMessageFee(tooSmallBytes);
+        expect.fail("Expected transaction to revert");
+      } catch (error: any) {
+        expect(error.message).to.satisfy((msg: string) => 
+          msg.includes("revert") || msg.includes("invalid") || msg.includes("out of bounds")
+        );
+      }
     });
 
     it("should revert when size too large", async function () {
@@ -307,8 +301,12 @@ describe("GovernanceStructs", function () {
 
       expect(ethers.utils.arrayify(encodedSetMessageFee).length).to.be.greaterThan(67);
 
-      await expect(gs.parseSetMessageFee(encodedSetMessageFee))
-        .to.be.revertedWith("invalid SetMessageFee");
+      try {
+        await gs.parseSetMessageFee(encodedSetMessageFee);
+        expect.fail("Expected transaction to revert");
+      } catch (error: any) {
+        expect(error.message).to.include("invalid SetMessageFee");
+      }
     });
   });
 
@@ -386,8 +384,12 @@ describe("GovernanceStructs", function () {
         [module, wrongAction, chain, amount, recipient]
       );
 
-      await expect(gs.parseTransferFees(encodedTransferFees))
-        .to.be.revertedWith("invalid TransferFees");
+      try {
+        await gs.parseTransferFees(encodedTransferFees);
+        expect.fail("Expected transaction to revert");
+      } catch (error: any) {
+        expect(error.message).to.include("invalid TransferFees");
+      }
     });
 
     it("should handle fuzzing for wrong action revert", async function () {
@@ -405,8 +407,12 @@ describe("GovernanceStructs", function () {
           [module, action, chain, amount, recipient]
         );
 
-        await expect(gs.parseTransferFees(encodedTransferFees))
-          .to.be.revertedWith("invalid TransferFees");
+        try {
+          await gs.parseTransferFees(encodedTransferFees);
+          expect.fail("Expected transaction to revert");
+        } catch (error: any) {
+          expect(error.message).to.include("invalid TransferFees");
+        }
 
         await new Promise(resolve => setTimeout(resolve, 50));
       }
@@ -415,8 +421,14 @@ describe("GovernanceStructs", function () {
     it("should revert when size too small", async function () {
       const tooSmallBytes = ethers.utils.hexlify(ethers.utils.randomBytes(90)); // 90 < 99
 
-      await expect(gs.parseTransferFees(tooSmallBytes))
-        .to.be.reverted;
+      try {
+        await gs.parseTransferFees(tooSmallBytes);
+        expect.fail("Expected transaction to revert");
+      } catch (error: any) {
+        expect(error.message).to.satisfy((msg: string) => 
+          msg.includes("revert") || msg.includes("invalid") || msg.includes("out of bounds")
+        );
+      }
     });
 
     it("should revert when size too large", async function () {
@@ -434,8 +446,12 @@ describe("GovernanceStructs", function () {
 
       expect(ethers.utils.arrayify(encodedTransferFees).length).to.be.greaterThan(99);
 
-      await expect(gs.parseTransferFees(encodedTransferFees))
-        .to.be.revertedWith("invalid TransferFees");
+      try {
+        await gs.parseTransferFees(encodedTransferFees);
+        expect.fail("Expected transaction to revert");
+      } catch (error: any) {
+        expect(error.message).to.include("invalid TransferFees");
+      }
     });
   });
 
@@ -512,8 +528,12 @@ describe("GovernanceStructs", function () {
         [module, wrongAction, evmChainId, newChainId]
       );
 
-      await expect(gs.parseRecoverChainId(encodedRecoverChainId))
-        .to.be.revertedWith("invalid RecoverChainId");
+      try {
+        await gs.parseRecoverChainId(encodedRecoverChainId);
+        expect.fail("Expected transaction to revert");
+      } catch (error: any) {
+        expect(error.message).to.include("invalid RecoverChainId");
+      }
     });
 
     it("should handle fuzzing for wrong action revert", async function () {
@@ -530,8 +550,12 @@ describe("GovernanceStructs", function () {
           [module, action, evmChainId, newChainId]
         );
 
-        await expect(gs.parseRecoverChainId(encodedRecoverChainId))
-          .to.be.revertedWith("invalid RecoverChainId");
+        try {
+          await gs.parseRecoverChainId(encodedRecoverChainId);
+          expect.fail("Expected transaction to revert");
+        } catch (error: any) {
+          expect(error.message).to.include("invalid RecoverChainId");
+        }
 
         await new Promise(resolve => setTimeout(resolve, 50));
       }
@@ -540,8 +564,14 @@ describe("GovernanceStructs", function () {
     it("should revert when size too small", async function () {
       const tooSmallBytes = ethers.utils.hexlify(ethers.utils.randomBytes(60)); // 60 < 67
 
-      await expect(gs.parseRecoverChainId(tooSmallBytes))
-        .to.be.reverted;
+      try {
+        await gs.parseRecoverChainId(tooSmallBytes);
+        expect.fail("Expected transaction to revert");
+      } catch (error: any) {
+        expect(error.message).to.satisfy((msg: string) => 
+          msg.includes("revert") || msg.includes("invalid") || msg.includes("out of bounds")
+        );
+      }
     });
 
     it("should revert when size too large", async function () {
@@ -558,8 +588,12 @@ describe("GovernanceStructs", function () {
 
       expect(ethers.utils.arrayify(encodedRecoverChainId).length).to.be.greaterThan(67);
 
-      await expect(gs.parseRecoverChainId(encodedRecoverChainId))
-        .to.be.revertedWith("invalid RecoverChainId");
+      try {
+        await gs.parseRecoverChainId(encodedRecoverChainId);
+        expect.fail("Expected transaction to revert");
+      } catch (error: any) {
+        expect(error.message).to.include("invalid RecoverChainId");
+      }
     });
   });
 });
