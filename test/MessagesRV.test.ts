@@ -3,22 +3,7 @@ import { ethers } from "hardhat";
 import { Contract, Signer } from "ethers";
 import { SigningKey } from "ethers/lib/utils";
 
-/**
- * MESSAGES RV MIGRATION RESULTS: TARGET 100% SUCCESS
- * 
- * 🎯 FOUNDRY EQUIVALENT COVERAGE:
- * - testCannotVerifySignaturesWithOutOfBoundsSignature → TS fuzzing test
- * - testCannotVerifySignaturesWithInvalidSignature1 → TS fuzzing test  
- * - testCannotVerifySignaturesWithInvalidSignature2 → TS fuzzing test
- * - testVerifySignatures → TS fuzzing test
- * 
- * 🔧 KEY MIGRATIONS:
- * - vm.assume() → TypeScript validation logic
- * - vm.sign() → ethers SigningKey.signDigest()
- * - vm.addr() → ethers.utils.computeAddress()
- * - Guardian set generation → TypeScript helper functions
- * - Signature structure → TypeScript interfaces
- */
+
 
 interface GuardianSetParams {
   privateKeys: string[];
