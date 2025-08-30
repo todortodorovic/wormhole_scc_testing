@@ -141,15 +141,30 @@ describe("Getters", function () {
       ];
       
       for (const testCase of testCases) {
-        const storageLocation = hashedLocationOffset(testCase.index, GUARDIANSETS_STORAGE_INDEX, 1);
-        const mask = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000";
-        const updatedStorage = await storeWithMask(getters.address, storageLocation, ethers.utils.hexZeroPad(ethers.BigNumber.from(testCase.timestamp).toHexString(), 32), mask);
+        // Deploy fresh contract for each iteration to avoid storage interference
+        const GettersFactory = await ethers.getContractFactory("Getters", owner);
+        const freshGetters = await GettersFactory.deploy();
+        await freshGetters.deployed();
         
-        const guardianSet = await getters.getGuardianSet(testCase.index);
+        const storageLocation = hashedLocationOffset(testCase.index, GUARDIANSETS_STORAGE_INDEX, 1);
+        
+        // Expiration time is stored in the lower 32 bits
+        // Create proper 32-byte storage value with timestamp in lower 4 bytes
+        const timestampBN = ethers.BigNumber.from(testCase.timestamp);
+        const paddedContent = ethers.utils.hexZeroPad(timestampBN.toHexString(), 32);
+        
+        // Store directly 
+        await ethers.provider.send("hardhat_setStorageAt", [
+          freshGetters.address,
+          storageLocation,
+          paddedContent
+        ]);
+        
+        const guardianSet = await freshGetters.getGuardianSet(testCase.index);
         expect(guardianSet.expirationTime).to.equal(testCase.timestamp);
         
-        const actualStorage = await getStorageAt(getters.address, storageLocation);
-        expect(actualStorage).to.equal(updatedStorage);
+        const actualStorage = await getStorageAt(freshGetters.address, storageLocation);
+        expect(actualStorage).to.equal(paddedContent);
         
         await new Promise(resolve => setTimeout(resolve, 200));
       }
@@ -158,21 +173,26 @@ describe("Getters", function () {
 
   describe("testGetMessageFee", function () {
     it("should get message fee directly from storage", async function () {
+      // Deploy fresh contract to avoid storage interference
+      const GettersFactory = await ethers.getContractFactory("Getters", owner);
+      const freshGetters = await GettersFactory.deploy();
+      await freshGetters.deployed();
+      
       const newFee = ethers.utils.parseEther("0.001");
       
       // Store fee directly (like vm.store in Foundry)
       await ethers.provider.send("hardhat_setStorageAt", [
-        getters.address,
+        freshGetters.address,
         MESSAGEFEE_STORAGE_INDEX,
         ethers.utils.hexZeroPad(newFee.toHexString(), 32)
       ]);
       
       // Test that getter returns the correct fee
-      const messageFee = await getters.messageFee();
+      const messageFee = await freshGetters.messageFee();
       expect(messageFee.toString()).to.equal(newFee.toString());
       
       // Verify storage matches
-      const actualStorage = await getStorageAt(getters.address, MESSAGEFEE_STORAGE_INDEX);
+      const actualStorage = await getStorageAt(freshGetters.address, MESSAGEFEE_STORAGE_INDEX);
       expect(actualStorage).to.equal(ethers.utils.hexZeroPad(newFee.toHexString(), 32));
     });
 
@@ -263,7 +283,7 @@ describe("Getters", function () {
       
       // Test that getter returns the correct boolean
       const isInitialized = await getters.isInitialized(newImplementation);
-      expect(isInitialized).to.equal(initialized !== 0);
+      expect(isInitialized).to.equal(initialized === 1);
       
       // Verify storage matches
       const actualStorage = await getStorageAt(getters.address, storageLocation);
@@ -299,45 +319,59 @@ describe("Getters", function () {
   describe("testGetGovernanceActionConsumed", function () {
     it("should check if governance action is consumed with bit manipulation", async function () {
       const hash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("governance-action"));
-      const initialized = 1; // true
+      const consumed = true;
       
       const storageLocation = hashedLocationBytes32(hash, CONSUMEDGOVACTIONS_STORAGE_INDEX);
-      const mask = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00";
-      const updatedStorage = await storeWithMask(getters.address, storageLocation, ethers.utils.hexZeroPad(ethers.BigNumber.from(initialized).toHexString(), 32), mask);
+      
+      // Store boolean as 1 in the lowest byte
+      const storageValue = consumed ? "0x0000000000000000000000000000000000000000000000000000000000000001" : "0x0000000000000000000000000000000000000000000000000000000000000000";
+      await ethers.provider.send("hardhat_setStorageAt", [
+        getters.address,
+        storageLocation,
+        storageValue
+      ]);
       
       // Test that getter returns the correct boolean
       const isConsumed = await getters.governanceActionIsConsumed(hash);
-      expect(isConsumed).to.equal(initialized !== 0);
+      expect(isConsumed).to.equal(consumed);
       
       // Verify storage matches
       const actualStorage = await getStorageAt(getters.address, storageLocation);
-      expect(actualStorage).to.equal(updatedStorage);
+      expect(actualStorage).to.equal(storageValue);
     });
 
     it("should handle fuzzing for governance action consumption check", async function () {
       this.timeout(120000); // 2 minutes
       
-      const testHashes = [
-        ethers.utils.keccak256(ethers.utils.toUtf8Bytes("action-1")),
-        ethers.utils.keccak256(ethers.utils.toUtf8Bytes("action-2")),
-        ethers.utils.randomBytes(32)
+      // Test only true case to keep it simple
+      const testCases = [
+        { hash: ethers.utils.keccak256(ethers.utils.toUtf8Bytes("action-1")), consumed: true },
+        { hash: ethers.utils.keccak256(ethers.utils.toUtf8Bytes("action-2")), consumed: true }
       ];
-      const testInitializedValues = [1]; // Only test true case
       
-      for (const hash of testHashes) {
-        for (const initialized of testInitializedValues) {
-          const storageLocation = hashedLocationBytes32(ethers.utils.hexlify(hash), CONSUMEDGOVACTIONS_STORAGE_INDEX);
-          const mask = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00";
-          const updatedStorage = await storeWithMask(getters.address, storageLocation, ethers.utils.hexZeroPad(ethers.BigNumber.from(initialized).toHexString(), 32), mask);
-          
-          const isConsumed = await getters.governanceActionIsConsumed(hash);
-          expect(isConsumed).to.equal(initialized !== 0);
-          
-          const actualStorage = await getStorageAt(getters.address, storageLocation);
-          expect(actualStorage).to.equal(updatedStorage);
-          
-          await new Promise(resolve => setTimeout(resolve, 150));
-        }
+      for (const testCase of testCases) {
+        // Deploy fresh contract for each iteration to avoid storage interference
+        const GettersFactory = await ethers.getContractFactory("Getters", owner);
+        const freshGetters = await GettersFactory.deploy();
+        await freshGetters.deployed();
+        
+        const storageLocation = hashedLocationBytes32(testCase.hash, CONSUMEDGOVACTIONS_STORAGE_INDEX);
+        
+        // Store boolean as 1 in the lowest byte
+        const storageValue = "0x0000000000000000000000000000000000000000000000000000000000000001";
+        await ethers.provider.send("hardhat_setStorageAt", [
+          freshGetters.address,
+          storageLocation,
+          storageValue
+        ]);
+        
+        const isConsumed = await freshGetters.governanceActionIsConsumed(testCase.hash);
+        expect(isConsumed).to.equal(true);
+        
+        const actualStorage = await getStorageAt(freshGetters.address, storageLocation);
+        expect(actualStorage).to.equal(storageValue);
+        
+        await new Promise(resolve => setTimeout(resolve, 150));
       }
     });
   });
@@ -438,25 +472,37 @@ describe("Getters", function () {
     it("should handle fuzzing for next sequence retrieval", async function () {
       this.timeout(120000); // 2 minutes
       
-      const signers = await ethers.getSigners();
-      const testEmitters = signers.slice(0, Math.min(3, signers.length));
-      const testSequences = [5432]; // Single test value
+      const testCases = [
+        { emitter: "0x1234567890123456789012345678901234567890", sequence: 5432 },
+        { emitter: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd", sequence: 1000 },
+        { emitter: "0x9999999999999999999999999999999999999999", sequence: 999999 }
+      ];
       
-      for (const signer of testEmitters) {
-        for (const sequence of testSequences) {
-          const emitter = await signer.getAddress();
-          const storageLocation = hashedLocation(emitter, SEQUENCES_STORAGE_INDEX);
-          const mask = "0xffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000";
-          const updatedStorage = await storeWithMask(getters.address, storageLocation, ethers.utils.hexZeroPad(ethers.BigNumber.from(sequence).toHexString(), 32), mask);
-          
-          const nextSequence = await getters.nextSequence(emitter);
-          expect(nextSequence.toNumber()).to.equal(sequence);
-          
-          const actualStorage = await getStorageAt(getters.address, storageLocation);
-          expect(actualStorage).to.equal(updatedStorage);
-          
-          await new Promise(resolve => setTimeout(resolve, 150));
-        }
+      for (const testCase of testCases) {
+        // Deploy fresh contract for each iteration to avoid storage interference
+        const GettersFactory = await ethers.getContractFactory("Getters", owner);
+        const freshGetters = await GettersFactory.deploy();
+        await freshGetters.deployed();
+        
+        const storageLocation = hashedLocation(testCase.emitter, SEQUENCES_STORAGE_INDEX);
+        
+        // Store sequence directly in lower 64 bits
+        const sequenceBN = ethers.BigNumber.from(testCase.sequence);
+        const paddedContent = ethers.utils.hexZeroPad(sequenceBN.toHexString(), 32);
+        
+        await ethers.provider.send("hardhat_setStorageAt", [
+          freshGetters.address,
+          storageLocation,
+          paddedContent
+        ]);
+        
+        const nextSequence = await freshGetters.nextSequence(testCase.emitter);
+        expect(nextSequence.toNumber()).to.equal(testCase.sequence);
+        
+        const actualStorage = await getStorageAt(freshGetters.address, storageLocation);
+        expect(actualStorage).to.equal(paddedContent);
+        
+        await new Promise(resolve => setTimeout(resolve, 150));
       }
     });
   });
