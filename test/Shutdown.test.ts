@@ -2,23 +2,6 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { Contract, Signer } from "ethers";
 
-/**
- * SHUTDOWN MIGRATION RESULTS: TARGET 100% SUCCESS
- * 
- * 🎯 FOUNDRY EQUIVALENT COVERAGE:
- * - testShutdownInit → TS test with initialization validation
- * - testShutdown_publishMessage_revert → TS test with revert expectation
- * 
- * 🔧 KEY MIGRATIONS:
- * - vm.prank() → contract.connect(signer)
- * - vm.expectRevert() → try/catch error handling
- * - unchangedStorage modifier → TypeScript storage comparison
- * - Simplified contract deployment for testing
- * 
- * ⚠️  LIMITATIONS:
- * - Complex VM creation and contract upgrades simplified due to Hardhat/Polkadot config
- * - Focus on core shutdown functionality testing
- */
 
 describe("Shutdown", function () {
   let shutdown: Contract;
