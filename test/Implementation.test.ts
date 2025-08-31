@@ -3,29 +3,6 @@ import { ethers } from "hardhat";
 import { Contract, Signer } from "ethers";
 import { SigningKey } from "ethers/lib/utils";
 
-/**
- * IMPLEMENTATION MIGRATION RESULTS: TARGET 100% SUCCESS
- * 
- * 🎯 FOUNDRY EQUIVALENT COVERAGE:
- * GROUP 1 - Message Publishing:
- * - testPublishMessage → TS test with sequence validation
- * - testPublishMessage_Emit → TS event emission test
- * - testPublishMessage_Revert_InvalidFee → TS fee validation test  
- * - testPublishMessage_Revert_OutOfFunds → TS insufficient funds test
- * 
- * 🔧 KEY MIGRATIONS:
- * - vm.assume() → TypeScript validation logic (simplified)
- * - vm.store() → Simplified without storage manipulation
- * - vm.deal() → Default account balances
- * - vm.prank() → contract.connect(signer)
- * - vm.expectEmit() → chai event emission testing
- * - vm.expectRevert() → try/catch error handling
- * - unchangedStorage modifier → Basic storage comparison
- * 
- * ⚠️  LIMITATIONS:
- * - Storage manipulation simplified due to Hardhat/Polkadot config limitations
- * - Focus on core functionality testing without KEVM symbolic execution
- */
 
 describe("Implementation", function () {
   let proxy: Contract;
@@ -84,10 +61,7 @@ describe("Implementation", function () {
     return await ethers.provider.getStorageAt(contractAddress, slot);
   }
 
-  // =============================================================================
-  // GROUP 1: MESSAGE PUBLISHING TESTS
-  // =============================================================================
-
+ 
   it("should publish message and increment sequence", async function () {
     const signers = await ethers.getSigners();
     const alice = signers[1] || signers[0];
@@ -277,9 +251,6 @@ describe("Implementation", function () {
     }
   });
 
-  // =============================================================================
-  // GROUP 2: INITIALIZATION AND SETUP TESTS  
-  // =============================================================================
 
   it("should be initialized with correct signers and values", async function () {
     // Test basic initialization
@@ -350,9 +321,6 @@ describe("Implementation", function () {
     expect(finalSequence.toNumber()).to.equal(initialSequence.toNumber() + 3);
   });
 
-  // =============================================================================
-  // GROUP 3: VM PARSING AND VERIFICATION TESTS
-  // =============================================================================
 
   it("should verify VM parsing function exists", async function () {
     // Simple test to check if parseAndVerifyVM method exists
@@ -687,10 +655,7 @@ describe("Implementation", function () {
     }
   });
 
-  // =============================================================================
-  // GROUP 4: GOVERNANCE OPERATIONS TESTS
-  // =============================================================================
-
+  
   // Helper constants for governance actions
   const core = "0x00000000000000000000000000000000000000000000000000000000436f7265";
   const actionContractUpgrade = 1;
@@ -996,9 +961,6 @@ describe("Implementation", function () {
     }
   });
 
-  // =============================================================================
-  // GROUP 5: ADVANCED GOVERNANCE TESTS
-  // =============================================================================
 
   it("should revert governance packets from old guardian set", async function () {
     const timestamp = 1000;
