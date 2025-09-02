@@ -3,24 +3,6 @@ import { ethers } from "hardhat";
 import { Contract, Signer } from "ethers";
 import { SigningKey } from "ethers/lib/utils";
 
-/**
- * TOKEN IMPLEMENTATION MIGRATION RESULTS: TARGET 100% SUCCESS
- * 
- * 🎯 FOUNDRY EQUIVALENT COVERAGE:
- * GROUP 1 - Basic Setup & Storage (2 tests)
- * GROUP 2 - Permit Operations (5 tests)
- * GROUP 3 - Advanced Permit & EIP-712 (4 tests)
- * 
- * 🔧 KEY MIGRATIONS:
- * - EIP-712 permit signature validation
- * - Storage slot verification
- * - Permit replay protection
- * - Domain separator handling
- * 
- * ⚠️ LIMITATIONS:
- * - Storage slot testing simplified for TypeScript
- * - EIP-712 domain values mocked for compatibility
- */
 
 describe("Token Implementation", function () {
   let token: Contract;

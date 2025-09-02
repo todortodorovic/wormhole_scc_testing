@@ -2,23 +2,6 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { Contract, Signer } from "ethers";
 
-/**
- * TOKEN MIGRATOR MIGRATION RESULTS: TARGET 100% SUCCESS
- * 
- * 🎯 FOUNDRY EQUIVALENT COVERAGE:
- * GROUP 1 - LP Token Operations (2 tests)
- * GROUP 2 - Migration & Decimal Adjustment (2 tests)
- * 
- * 🔧 KEY MIGRATIONS:
- * - LP token 1:1 deposit/withdraw functionality
- * - Token migration with decimal conversion (8→18 decimals)
- * - Sequential test dependencies maintained
- * - Claim mechanism for completed migrations
- * 
- * ⚠️ LIMITATIONS:
- * - Mock contracts used for compatibility
- * - Decimal conversion logic simplified for TypeScript
- */
 
 describe("Token Migrator", function () {
   let fromToken: Contract;
