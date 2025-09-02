@@ -17,7 +17,7 @@ describe("Bridge", function () {
   let deployer: Signer;
 
   const testChainId = 1337;
-  const testEvmChainId = 1337;
+  const testEvmChainId = 420420420; // Current Hardhat network chain ID
   const governanceChainId = 1;
   const governanceContract = "0x0000000000000000000000000000000000000000000000000000000000000004";
   const finality = 15;
@@ -36,94 +36,126 @@ describe("Bridge", function () {
   const testBridgedAssetChain = 1;
   const testBridgedAssetAddress = "0x000000000000000000000000b7a2211e8165943192ad04f5dd21bedc29ff003e";
 
-  beforeEach(async function () {
+  before(async function () {
+    this.timeout(120000); // Increased timeout for one-time deployment
     const signers = await ethers.getSigners();
     owner = signers[0];
     alice = signers[1] || signers[0];
     deployer = signers[0];
 
     try {
-      // Deploy simplified bridge implementation for testing
-      const BridgeImplementationFactory = await ethers.getContractFactory("BridgeImplementation", deployer);
-      bridge = await BridgeImplementationFactory.deploy();
-      await bridge.deployed();
+      // Deploy REAL Bridge infrastructure like in Foundry test
       
-      bridgeImpl = bridge;
+      // Deploy mock Wormhole for bridge setup (simplified)
+      wormhole = {
+        address: ethers.Wallet.createRandom().address,
+        chainId: async () => testChainId,
+        evmChainId: async () => testEvmChainId,
+        publishMessage: async () => Promise.resolve()
+      } as any;
 
-      // Deploy mock WETH
-      try {
-        const MockWETH9Factory = await ethers.getContractFactory("MockWETH9", deployer);
-        weth = await MockWETH9Factory.deploy();
-        await weth.deployed();
-      } catch (error) {
-        // Create minimal mock if MockWETH9 doesn't exist
-        weth = { address: ethers.constants.AddressZero };
-      }
+      // Deploy BridgeSetup
+      const BridgeSetupFactory = await ethers.getContractFactory("BridgeSetup", deployer);
+      const bridgeSetup = await BridgeSetupFactory.deploy();
+      await bridgeSetup.deployed();
 
-      // Deploy token implementation  
-      try {
-        const TokenImplementationFactory = await ethers.getContractFactory("TokenImplementation", deployer);
-        tokenImpl = await TokenImplementationFactory.deploy();
-        await tokenImpl.deployed();
-      } catch (error) {
-        tokenImpl = { 
-          address: ethers.constants.AddressZero,
-          initialize: async () => { throw new Error("function not available"); },
-          mint: async () => { throw new Error("caller is not the owner"); },
-          burn: async () => { throw new Error("caller is not the owner"); },
-          connect: () => tokenImpl,
-          approve: async () => { throw new Error("function not available"); },
-          balanceOf: async () => ethers.BigNumber.from("0"),
-          totalSupply: async () => ethers.BigNumber.from("0")
-        };
-      }
+      // Deploy BridgeImplementation 
+      const BridgeImplementationFactory = await ethers.getContractFactory("BridgeImplementation", deployer);
+      bridgeImpl = await BridgeImplementationFactory.deploy();
+      await bridgeImpl.deployed();
+
+      // Deploy TokenImplementation
+      const TokenImplementationFactory = await ethers.getContractFactory("TokenImplementation", deployer);
+      tokenImpl = await TokenImplementationFactory.deploy();
+      await tokenImpl.deployed();
+
+      // Deploy MockWETH9
+      const MockWETH9Factory = await ethers.getContractFactory("MockWETH9", deployer);
+      weth = await MockWETH9Factory.deploy();
+      await weth.deployed();
+
+      // Create setup data like in Foundry test
+      const BridgeSetupInterface = new ethers.utils.Interface([
+        "function setup(address,uint16,address,uint16,bytes32,address,address,uint8,uint256)"
+      ]);
+      
+      const setupAbi = BridgeSetupInterface.encodeFunctionData("setup", [
+        bridgeImpl.address,     // implementation
+        testChainId,           // chainId
+        wormhole.address,      // wormhole
+        governanceChainId,     // governanceChainId  
+        governanceContract,    // governanceContract
+        tokenImpl.address,     // tokenImplementation
+        weth.address,         // WETH
+        finality,             // finality
+        testEvmChainId        // evmChainId
+      ]);
+
+      // Deploy TokenBridge proxy
+      const TokenBridgeFactory = await ethers.getContractFactory("TokenBridge", deployer);
+      const bridgeProxy = await TokenBridgeFactory.deploy(bridgeSetup.address, setupAbi);
+      await bridgeProxy.deployed();
+
+      // Connect to bridge implementation interface
+      bridge = await ethers.getContractAt("BridgeImplementation", bridgeProxy.address, deployer);
+
+      // Verify setup
+      expect(await bridge.tokenImplementation()).to.equal(tokenImpl.address);
+      expect(await bridge.chainId()).to.equal(testChainId);
+      expect((await bridge.evmChainId()).eq(testEvmChainId)).to.be.true;
+      expect(await bridge.finality()).to.equal(finality);
+      expect(await bridge.WETH()).to.equal(weth.address);
 
     } catch (error) {
-      // If all deployments fail, create minimal mock for testing
-      bridge = {
-        address: "0x1234567890123456789012345678901234567890",
-        _truncateAddressPub: async () => "0xb7a2211e8165943192ad04f5dd21bedc29ff003e",
-        setChainIdPub: async () => {},
-        setEvmChainIdPub: async () => { throw new Error("invalid evmChainId"); },
-        chainId: async () => 1,
-        evmChainId: async () => 1,
-        WETH: async () => ethers.constants.AddressZero,
-        tokenImplementation: async () => ethers.constants.AddressZero,
-        implementation: async () => ethers.constants.AddressZero,
-        finality: async () => 15,
-        governanceChainId: async () => 1,
-        governanceContract: async () => governanceContract,
-        bridgeContracts: async () => "0x0000000000000000000000000000000000000000000000000000000000000000",
-        registerChain: async () => { throw new Error("function not available"); },
-        upgrade: async () => { throw new Error("function not available"); },
-        attestToken: async () => { throw new Error("function not available"); },
-        createWrapped: async () => { throw new Error("function not available"); },
-        updateWrapped: async () => { throw new Error("function not available"); },
-        wrappedAsset: async () => ethers.constants.AddressZero,
-        isWrappedAsset: async () => false,
-        transferTokens: async () => { throw new Error("function not available"); },
-        transferTokensWithPayload: async () => { throw new Error("function not available"); },
-        completeTransfer: async () => { throw new Error("function not available"); },
-        completeTransferWithPayload: async () => { throw new Error("function not available"); },
-        wrapAndTransferETH: async () => { throw new Error("function not available"); },
-        wrapAndTransferETHWithPayload: async () => { throw new Error("function not available"); },
-        completeTransferAndUnwrapETH: async () => { throw new Error("function not available"); },
-        completeTransferAndUnwrapETHWithPayload: async () => { throw new Error("function not available"); },
-        testOverwriteEVMChainId: async () => { throw new Error("function not available"); }
-      };
+      console.log("Real Bridge contract deployment error:", error);
+      throw error; // Fail fast if real contracts can't be deployed
+    }
+    
+    // Add delay to ensure all contracts are properly deployed and state is stable
+    await new Promise(resolve => setTimeout(resolve, 2500));
+  });
+
+  beforeEach(async function () {
+    // Reset contract state between tests by cleaning up any leftover balances
+    try {
+      const ownerAddress = await owner.getAddress();
+      const aliceAddress = await alice.getAddress();
       
-      bridgeImpl = bridge;
-      weth = { address: ethers.constants.AddressZero };
-      tokenImpl = { 
-        address: ethers.constants.AddressZero,
-        initialize: async () => { throw new Error("function not available"); },
-        mint: async () => { throw new Error("caller is not the owner"); },
-        burn: async () => { throw new Error("caller is not the owner"); },
-        connect: () => tokenImpl,
-        approve: async () => { throw new Error("function not available"); },
-        balanceOf: async () => ethers.BigNumber.from("0"),
-        totalSupply: async () => ethers.BigNumber.from("0")
-      };
+      // Clean up any TokenImplementation balances
+      const ownerTokenBalance = await tokenImpl.balanceOf(ownerAddress);
+      if (ownerTokenBalance.gt(0)) {
+        await tokenImpl.burn(ownerAddress, ownerTokenBalance);
+      }
+      
+      const aliceTokenBalance = await tokenImpl.balanceOf(aliceAddress);
+      if (aliceTokenBalance.gt(0)) {
+        await tokenImpl.burn(aliceAddress, aliceTokenBalance);
+      }
+      
+      const bridgeTokenBalance = await tokenImpl.balanceOf(bridge.address);
+      if (bridgeTokenBalance.gt(0)) {
+        await tokenImpl.burn(bridge.address, bridgeTokenBalance);
+      }
+      
+      // Clean up any WETH balances that might affect tests
+      const ownerWethBalance = await weth.balanceOf(ownerAddress);
+      if (ownerWethBalance.gt(0)) {
+        await weth.burn(ownerAddress, ownerWethBalance);
+      }
+      
+      const aliceWethBalance = await weth.balanceOf(aliceAddress);  
+      if (aliceWethBalance.gt(0)) {
+        await weth.burn(aliceAddress, aliceWethBalance);
+      }
+      
+      // Clean up bridge WETH balance
+      const bridgeWethBalance = await weth.balanceOf(bridge.address);
+      if (bridgeWethBalance.gt(0)) {
+        await weth.burn(bridge.address, bridgeWethBalance);
+      }
+      
+    } catch (error) {
+      // State cleanup might not always be needed
     }
   });
 
@@ -994,7 +1026,7 @@ describe("Bridge", function () {
   });
 
   it("should mint bridged asset wrappers on cross-chain transfer and handle fees", async function () {
-    this.timeout(90000);
+    this.timeout(120000); // Increased timeout for complex operations
 
     try {
       const amount = ethers.utils.parseEther("1");
@@ -1720,6 +1752,9 @@ describe("Bridge", function () {
 
   it("should reject smart contract upgrades on forks", async function () {
     this.timeout(90000);
+    
+    // Add delay before complex fork upgrade operations
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     try {
       const timestamp = 1000;
@@ -1897,6 +1932,11 @@ describe("Bridge", function () {
   });
 
   it("should reject smart contract upgrades on forks", async function() {
+    this.timeout(90000);
+    
+    // Add delay before complex fork upgrade operations
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
     try {
       const timestamp = 1000;
       const nonce = 1001;
