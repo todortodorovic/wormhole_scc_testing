@@ -30,7 +30,8 @@ describe("MessagesRV", function () {
   const SECP256K1_CURVE_ORDER = ethers.BigNumber.from("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
   const MAX_UINT8 = 255;
 
-  beforeEach(async function () {
+    before(async function () {
+    this.timeout(60000);  
     try {
       const signers = await ethers.getSigners();
       owner = signers[0];

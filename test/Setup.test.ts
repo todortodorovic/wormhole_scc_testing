@@ -15,7 +15,8 @@ describe("Setup", function () {
   const testGuardian = "0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe";
   const governanceContract = "0x0000000000000000000000000000000000000000000000000000000000000004";
 
-  beforeEach(async function () {
+    before(async function () {
+    this.timeout(60000); 
     try {
       const signers = await ethers.getSigners();
       

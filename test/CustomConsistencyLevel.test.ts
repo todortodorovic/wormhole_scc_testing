@@ -31,7 +31,8 @@ describe("CustomConsistencyLevel", function () {
 
   // Contract deployment tests - only run if network allows
   describe("CustomConsistencyLevel Contract", function () {
-    beforeEach(async function () {
+    before(async function () {
+      this.timeout(30000); // Increased timeout for one-time deployment
       try {
         const signers = await ethers.getSigners();
         

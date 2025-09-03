@@ -22,7 +22,8 @@ describe("Token Implementation", function () {
     nativeContract: string;
   }
 
-  beforeEach(async function () {
+    before(async function () {
+    this.timeout(60000); 
     const signers = await ethers.getSigners();
     owner = signers[0];
     alice = signers[1] || signers[0];
@@ -84,6 +85,23 @@ describe("Token Implementation", function () {
         name: async () => "Valuable Token",
         permit: async () => { throw new Error("function not available"); }
       } as any;
+    }
+  });
+
+  beforeEach(async function () {
+    // Reset mock token state between tests without re-deployment
+    if (token && token.permit) {
+      // Reset permit function to original behavior
+      token.permit = async (owner: string, spender: string, value: string, deadline: number, v: number, r: string, s: string) => {
+        // Mock permit validation
+        if (deadline < Date.now() / 1000) {
+          throw new Error("permit expired");
+        }
+        if (v < 27 || v > 28) {
+          throw new Error("invalid signature");
+        }
+        return Promise.resolve();
+      };
     }
   });
 

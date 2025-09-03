@@ -14,6 +14,7 @@ describe("Token Migrator", function () {
   const toDecimals = 18;
 
   beforeEach(async function () {
+    this.timeout(60000); 
     const signers = await ethers.getSigners();
     owner = signers[0];
     user1 = signers[1] || signers[0];

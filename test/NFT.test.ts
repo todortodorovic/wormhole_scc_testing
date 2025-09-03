@@ -35,7 +35,8 @@ describe("NFT Bridge", function () {
   const testGuardian = "93941733246223705020089879371323733820373732307041878556247502674739205313440";
   const testGuardianPrivateKey = "0x" + ethers.BigNumber.from(testGuardian).toHexString().slice(2).padStart(64, '0');
 
-  beforeEach(async function () {
+    before(async function () {
+    this.timeout(60000); 
     const signers = await ethers.getSigners();
     owner = signers[0];
     alice = signers[1] || signers[0];

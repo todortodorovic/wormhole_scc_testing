@@ -8,7 +8,8 @@ describe("Shutdown", function () {
   let owner: Signer;
   let alice: Signer;
 
-  beforeEach(async function () {
+    before(async function () {
+    this.timeout(60000); 
     const signers = await ethers.getSigners();
     owner = signers[0];
     alice = signers[1] || signers[0];

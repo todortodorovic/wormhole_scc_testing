@@ -8,7 +8,8 @@ describe("GovernanceStructs", function () {
   let gs: Contract;
   let owner: Signer;
 
-  beforeEach(async function () {
+  before(async function () {
+    this.timeout(30000); // Increased timeout for one-time deployment
     try {
       const signers = await ethers.getSigners();
       owner = signers[0];

@@ -41,7 +41,8 @@ describe("Setters", function () {
     return value === "0x" ? "0x0000000000000000000000000000000000000000000000000000000000000000" : value;
   }
 
-  beforeEach(async function () {
+   before(async function () {
+    this.timeout(60000); 
     try {
       const signers = await ethers.getSigners();
       

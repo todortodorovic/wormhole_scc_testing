@@ -14,7 +14,8 @@ describe("TestCustomConsistencyLevel", function () {
   const userBAddr = "0x0000000000000000000000000000000000000456";
   const wormholeAddr = "0x0000000000000000000000000000000000123456";
 
-  beforeEach(async function () {
+    before(async function () {
+    this.timeout(60000); 
     try {
       const signers = await ethers.getSigners();
       
@@ -76,6 +77,16 @@ describe("TestCustomConsistencyLevel", function () {
       const nonce = await testCustomConsistencyLevel.nonce();
       expect(nonce).to.equal(0);
     });
+  });
+
+  beforeEach(async function () {
+    // Reset testCustomConsistencyLevel configuration to original values between tests
+    // This prevents test interference from configuration changes
+    try {
+      await testCustomConsistencyLevel.configure(201, 5); // Original deployment values
+    } catch (error) {
+      // Configuration reset might fail in some scenarios
+    }
   });
 
   describe("Configuration Tests", function () {

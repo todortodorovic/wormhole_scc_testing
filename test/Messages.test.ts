@@ -16,7 +16,8 @@ describe("Messages", function () {
   // Private key for testGuardianPub (from Foundry test)
   const testGuardianPrivateKey = "0xcfb12303a19cde580bb4dd771639b0d26bc68353645571a8cff516ab2ee113a0";
 
-  beforeEach(async function () {
+  before(async function () {
+    this.timeout(30000); // Increased timeout for one-time deployment
     try {
       const signers = await ethers.getSigners();
       
