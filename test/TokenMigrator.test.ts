@@ -202,7 +202,7 @@ describe("Token Migrator", function () {
   });
 
   it("should handle complete migration flow with fuzzing", async function () {
-    this.timeout(60000); // Increased timeout for real contracts
+    this.timeout(60000); 
 
     const scenarios = [
       { depositAmount: "1", fromAmount: "0.1", description: "small amounts" },
