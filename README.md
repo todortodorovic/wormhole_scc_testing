@@ -5,7 +5,7 @@ This project is a migration of Foundry tests to Hardhat TypeScript for the Wormh
 
 1. Install dependencies:
 ```bash
-npm install
+npm install --legacy-peer-deps
 ```
 
 
