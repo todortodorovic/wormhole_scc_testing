@@ -87,7 +87,7 @@ describe("Messages", function () {
         if (numGuardians >= 256) {
           try {
             await messages.quorum(numGuardians);
-            expect.fail(`Expected revert for ${numGuardians} guardians`);
+            throw new Error(`Expected revert for ${numGuardians} guardians`);
           } catch (error: any) {
             expect(error.message).to.include("too many guardians");
           }
@@ -105,7 +105,7 @@ describe("Messages", function () {
       // Test that quorum calculation reverts for guardian counts >= 256
       try {
         await messages.quorum(256);
-        expect.fail("Expected revert for 256 guardians");
+        throw new Error("Expected revert for 256 guardians");
       } catch (error: any) {
         expect(error.message).to.include("too many guardians");
       }

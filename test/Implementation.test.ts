@@ -801,7 +801,7 @@ describe("Implementation", function () {
 
       try {
         await proxied.submitNewGuardianSet(vaa);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("revert");
       }
@@ -1001,7 +1001,7 @@ describe("Implementation", function () {
 
       try {
         await proxied.submitSetMessageFee(oldGuardianVaa);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.satisfy((msg: string) => 
           msg.includes("invalid guardian set") || 
@@ -1103,7 +1103,7 @@ describe("Implementation", function () {
 
     try {
       await proxied.submitSetMessageFee(wrongChainVaa);
-      expect.fail("Expected transaction to revert");
+      throw new Error("Expected transaction to revert");
     } catch (error: any) {
       expect(error.message).to.satisfy((msg: string) => 
         msg.includes("wrong governance chain") || 
@@ -1141,7 +1141,7 @@ describe("Implementation", function () {
 
     try {
       await proxied.submitSetMessageFee(wrongContractVaa);
-      expect.fail("Expected transaction to revert");
+      throw new Error("Expected transaction to revert");
     } catch (error: any) {
       expect(error.message).to.satisfy((msg: string) => 
         msg.includes("wrong governance contract") || 
@@ -1172,7 +1172,7 @@ describe("Implementation", function () {
       // Submit same VAA again (should fail)
       try {
         await proxied.submitSetMessageFee(vaa);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.satisfy((msg: string) => 
           msg.includes("governance action already consumed") || 

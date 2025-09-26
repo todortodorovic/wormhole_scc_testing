@@ -316,7 +316,7 @@ describe("Token Implementation", function () {
           sig.r,
           sig.s
         );
-        expect.fail("Should have reverted on permit replay");
+        throw new Error("Should have reverted on permit replay");
       } catch (error: any) {
         expect(error.message).to.include("invalid signature");
       }
@@ -358,7 +358,7 @@ describe("Token Implementation", function () {
           badSig.r,
           badSig.s
         );
-        expect.fail("Should have reverted on bad signature");
+        throw new Error("Should have reverted on bad signature");
       } catch (error: any) {
         expect(error.message).to.include("invalid signature");
       }
@@ -401,7 +401,7 @@ describe("Token Implementation", function () {
           sig.r,
           sig.s
         );
-        expect.fail("Should have reverted on expired permit");
+        throw new Error("Should have reverted on expired permit");
       } catch (error: any) {
         expect(error.message).to.include("permit expired");
       }

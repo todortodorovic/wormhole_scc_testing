@@ -214,7 +214,7 @@ describe("Bridge", function () {
       const invalidAddress = "0x1234567890123456789012345678901234567890123456789012345678901234";
       try {
         await bridge._truncateAddressPub(invalidAddress);
-        expect.fail("Should have reverted on invalid address");
+        throw new Error("Should have reverted on invalid address");
       } catch (error: any) {
         expect(error.message).to.include("invalid EVM address");
       }
@@ -243,7 +243,7 @@ describe("Bridge", function () {
       // Test invalid EVM chain ID (should revert)
       try {
         await bridge.setEvmChainIdPub(1337); // Different from block.chainid
-        expect.fail("Should have reverted on invalid evmChainId");
+        throw new Error("Should have reverted on invalid evmChainId");
       } catch (error: any) {
         expect(error.message).to.satisfy((msg: string) => 
           msg.includes("invalid evmChainId") ||
@@ -426,7 +426,7 @@ describe("Bridge", function () {
       // Non-owner cannot mint
       try {
         await tokenImpl.connect(alice).mint(await owner.getAddress(), ethers.utils.parseEther("10"));
-        expect.fail("Should have reverted for non-owner mint");
+        throw new Error("Should have reverted for non-owner mint");
       } catch (error: any) {
         expect(error.message).to.include("caller is not the owner");
       }
@@ -434,7 +434,7 @@ describe("Bridge", function () {
       // Non-owner cannot burn  
       try {
         await tokenImpl.connect(alice).burn(await owner.getAddress(), ethers.utils.parseEther("5"));
-        expect.fail("Should have reverted for non-owner burn");
+        throw new Error("Should have reverted for non-owner burn");
       } catch (error: any) {
         expect(error.message).to.include("caller is not the owner");
       }
@@ -590,7 +590,7 @@ describe("Bridge", function () {
 
       try {
         await bridge.updateWrapped(sameSequenceVaa);
-        expect.fail("Should have reverted for same sequence");
+        throw new Error("Should have reverted for same sequence");
       } catch (error: any) {
         expect(error.message).to.satisfy((msg: string) => 
           msg.includes("current metadata is up to date") ||
@@ -1189,7 +1189,7 @@ describe("Bridge", function () {
       // Try to complete transfer from different sender (not the 'to' address)
       try {
         await bridge.connect(alice).completeTransferWithPayload(vaa); // alice tries to complete, but 'to' is owner
-        expect.fail("Should have reverted for invalid sender");
+        throw new Error("Should have reverted for invalid sender");
       } catch (error: any) {
         expect(error.message).to.include("invalid sender");
       }
@@ -1398,7 +1398,7 @@ describe("Bridge", function () {
           0,
           235
         );
-        expect.fail("Should have reverted for exceeding max amount");
+        throw new Error("Should have reverted for exceeding max amount");
       } catch (error: any) {
         expect(error.message).to.satisfy((msg: string) =>
           msg.includes("transfer exceeds max outstanding bridged token amount") ||
@@ -1804,7 +1804,7 @@ describe("Bridge", function () {
 
       try {
         await bridge.upgrade(forkVaa);
-        expect.fail("Should have reverted upgrade on fork");
+        throw new Error("Should have reverted upgrade on fork");
       } catch (error: any) {
         expect(error.message).to.include("invalid fork");
       }
@@ -1974,7 +1974,7 @@ describe("Bridge", function () {
 
       try {
         await bridge.upgrade(upgradeVaa2);
-        expect.fail("Should have reverted upgrade on fork");
+        throw new Error("Should have reverted upgrade on fork");
       } catch (error: any) {
         expect(error.message).to.include("invalid fork");
       }

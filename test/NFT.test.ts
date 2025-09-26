@@ -271,7 +271,7 @@ describe("NFT Bridge", function () {
     // Verify token no longer exists
     try {
       await tokenImpl.ownerOf(1);
-      expect.fail("Token should not exist after burn");
+      throw new Error("Token should not exist after burn");
     } catch (error: any) {
       // Expected - token should not exist
       expect(error.message).to.include("nonexistent");
@@ -522,7 +522,7 @@ describe("NFT Bridge", function () {
           0,
           nonce
         );
-        expect.fail("Should have reverted for unapproved NFT");
+        throw new Error("Should have reverted for unapproved NFT");
       } catch (error: any) {
         expect(error.message).to.include("not approved");
       }
@@ -554,7 +554,7 @@ describe("NFT Bridge", function () {
 
       try {
         await mockWrappedNFT.burn();
-        expect.fail("Should have reverted when burning NFT not owned by sender");
+        throw new Error("Should have reverted when burning NFT not owned by sender");
       } catch (error: any) {
         expect(error.message).to.include("not owner");
       }
@@ -641,7 +641,7 @@ describe("NFT Bridge", function () {
 
       try {
         await bridge.upgrade(upgradeVaa2);
-        expect.fail("Should have reverted upgrade on fork");
+        throw new Error("Should have reverted upgrade on fork");
       } catch (error: any) {
         expect(error.message).to.include("invalid fork");
       }

@@ -150,7 +150,7 @@ describe("MessagesRV", function () {
 
       try {
         await messages.verifySignatures(message, signatures, guardianSet);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("guardian index out of bounds");
       }
@@ -182,7 +182,7 @@ describe("MessagesRV", function () {
 
         try {
           await messages.verifySignatures(message, signatures, guardianSet);
-          expect.fail("Expected transaction to revert");
+          throw new Error("Expected transaction to revert");
         } catch (error: any) {
           expect(error.message).to.include("guardian index out of bounds");
         }

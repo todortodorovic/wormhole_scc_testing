@@ -464,7 +464,7 @@ describe("Setters", function () {
       
       try {
         await setters.setEvmChainId_external(differentChainId);
-        expect.fail("Expected transaction to revert with 'invalid evmChainId'");
+        throw new Error("Expected transaction to revert with 'invalid evmChainId'");
       } catch (error: any) {
         expect(error.message).to.include("invalid evmChainId");
       }
@@ -489,7 +489,7 @@ describe("Setters", function () {
         
         try {
           await setters.setEvmChainId_external(chainId);
-          expect.fail(`Expected revert for chain ID ${chainId}`);
+          throw new Error(`Expected revert for chain ID ${chainId}`);
         } catch (error: any) {
           expect(error.message).to.include("invalid evmChainId");
         }

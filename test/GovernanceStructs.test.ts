@@ -101,7 +101,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseContractUpgrade(encodedUpgrade);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid ContractUpgrade");
       }
@@ -123,7 +123,7 @@ describe("GovernanceStructs", function () {
 
         try {
           await gs.parseContractUpgrade(encodedUpgrade);
-          expect.fail("Expected transaction to revert");
+          throw new Error("Expected transaction to revert");
         } catch (error: any) {
           expect(error.message).to.include("invalid ContractUpgrade");
         }
@@ -138,7 +138,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseContractUpgrade(tooSmallBytes);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.satisfy((msg: string) => 
           msg.includes("revert") || msg.includes("invalid") || msg.includes("out of bounds")
@@ -162,7 +162,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseContractUpgrade(encodedUpgrade);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid ContractUpgrade");
       }
@@ -244,7 +244,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseSetMessageFee(encodedSetMessageFee);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid SetMessageFee");
       }
@@ -266,7 +266,7 @@ describe("GovernanceStructs", function () {
 
         try {
           await gs.parseSetMessageFee(encodedSetMessageFee);
-          expect.fail("Expected transaction to revert");
+          throw new Error("Expected transaction to revert");
         } catch (error: any) {
           expect(error.message).to.include("invalid SetMessageFee");
         }
@@ -280,7 +280,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseSetMessageFee(tooSmallBytes);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.satisfy((msg: string) => 
           msg.includes("revert") || msg.includes("invalid") || msg.includes("out of bounds")
@@ -304,7 +304,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseSetMessageFee(encodedSetMessageFee);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid SetMessageFee");
       }
@@ -387,7 +387,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseTransferFees(encodedTransferFees);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid TransferFees");
       }
@@ -410,7 +410,7 @@ describe("GovernanceStructs", function () {
 
         try {
           await gs.parseTransferFees(encodedTransferFees);
-          expect.fail("Expected transaction to revert");
+          throw new Error("Expected transaction to revert");
         } catch (error: any) {
           expect(error.message).to.include("invalid TransferFees");
         }
@@ -424,7 +424,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseTransferFees(tooSmallBytes);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.satisfy((msg: string) => 
           msg.includes("revert") || msg.includes("invalid") || msg.includes("out of bounds")
@@ -449,7 +449,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseTransferFees(encodedTransferFees);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid TransferFees");
       }
@@ -531,7 +531,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseRecoverChainId(encodedRecoverChainId);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid RecoverChainId");
       }
@@ -553,7 +553,7 @@ describe("GovernanceStructs", function () {
 
         try {
           await gs.parseRecoverChainId(encodedRecoverChainId);
-          expect.fail("Expected transaction to revert");
+          throw new Error("Expected transaction to revert");
         } catch (error: any) {
           expect(error.message).to.include("invalid RecoverChainId");
         }
@@ -567,7 +567,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseRecoverChainId(tooSmallBytes);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.satisfy((msg: string) => 
           msg.includes("revert") || msg.includes("invalid") || msg.includes("out of bounds")
@@ -591,7 +591,7 @@ describe("GovernanceStructs", function () {
 
       try {
         await gs.parseRecoverChainId(encodedRecoverChainId);
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid RecoverChainId");
       }

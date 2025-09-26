@@ -279,7 +279,7 @@ describe("Governance", function () {
       // Try to initialize an already initialized implementation
       try {
         await impl.initialize();
-        expect.fail("Should have reverted on double initialization");
+        throw new Error("Should have reverted on double initialization");
       } catch (error: any) {
         expect(error.message).to.include("initialized");
       }
@@ -313,7 +313,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitContractUpgrade(vm);
-        expect.fail("Should have reverted on invalid fork");
+        throw new Error("Should have reverted on invalid fork");
       } catch (error: any) {
         expect(error.message).to.include("invalid fork");
       }
@@ -348,7 +348,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitContractUpgrade(vm);
-        expect.fail("Should have reverted on invalid module");
+        throw new Error("Should have reverted on invalid module");
       } catch (error: any) {
         expect(error.message).to.include("invalid module");
       }
@@ -382,7 +382,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitContractUpgrade(vm);
-        expect.fail("Should have reverted on invalid chain");
+        throw new Error("Should have reverted on invalid chain");
       } catch (error: any) {
         expect(error.message).to.include("invalid chain");
       }
@@ -415,7 +415,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitContractUpgrade(vm);
-        expect.fail("Should have reverted on invalid guardian set");
+        throw new Error("Should have reverted on invalid guardian set");
       } catch (error: any) {
         expect(error.message).to.include("invalid guardian set");
       }
@@ -467,7 +467,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitContractUpgrade(vm);
-        expect.fail("Should have reverted on wrong governance chain");
+        throw new Error("Should have reverted on wrong governance chain");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance chain");
       }
@@ -519,7 +519,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitContractUpgrade(vm);
-        expect.fail("Should have reverted on wrong governance contract");
+        throw new Error("Should have reverted on wrong governance contract");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance contract");
       }
@@ -555,7 +555,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitContractUpgrade(vm);
-        expect.fail("Should have reverted on replay attack");
+        throw new Error("Should have reverted on replay attack");
       } catch (error: any) {
         expect(error.message).to.include("replay attack");
       }
@@ -614,7 +614,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitSetMessageFee(vm);
-        expect.fail("Should have reverted on invalid module");
+        throw new Error("Should have reverted on invalid module");
       } catch (error: any) {
         expect(error.message).to.include("invalid module");
       }
@@ -642,7 +642,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitSetMessageFee(vm);
-        expect.fail("Should have reverted on invalid chain");
+        throw new Error("Should have reverted on invalid chain");
       } catch (error: any) {
         expect(error.message).to.include("invalid chain");
       }
@@ -671,7 +671,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitSetMessageFee(vm);
-        expect.fail("Should have reverted on invalid EVM chain");
+        throw new Error("Should have reverted on invalid EVM chain");
       } catch (error: any) {
         expect(error.message).to.include("invalid EVM chain");
       }
@@ -699,7 +699,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitSetMessageFee(vm);
-        expect.fail("Should have reverted on invalid guardian set");
+        throw new Error("Should have reverted on invalid guardian set");
       } catch (error: any) {
         expect(error.message).to.include("invalid guardian set");
       }
@@ -745,7 +745,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitSetMessageFee(vm);
-        expect.fail("Should have reverted on wrong governance chain");
+        throw new Error("Should have reverted on wrong governance chain");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance chain");
       }
@@ -792,7 +792,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitSetMessageFee(vm);
-        expect.fail("Should have reverted on wrong governance contract");
+        throw new Error("Should have reverted on wrong governance contract");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance contract");
       }
@@ -824,7 +824,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitSetMessageFee(vm);
-        expect.fail("Should have reverted on replay attack");
+        throw new Error("Should have reverted on replay attack");
       } catch (error: any) {
         expect(error.message).to.include("replay attack");
       }
@@ -879,7 +879,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        expect.fail("Should have reverted on invalid module");
+        throw new Error("Should have reverted on invalid module");
       } catch (error: any) {
         expect(error.message).to.include("invalid module");
       }
@@ -908,7 +908,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        expect.fail("Should have reverted on invalid chain");
+        throw new Error("Should have reverted on invalid chain");
       } catch (error: any) {
         expect(error.message).to.include("invalid chain");
       }
@@ -937,7 +937,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        expect.fail("Should have reverted on invalid EVM chain");
+        throw new Error("Should have reverted on invalid EVM chain");
       } catch (error: any) {
         expect(error.message).to.include("invalid EVM chain");
       }
@@ -966,7 +966,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        expect.fail("Should have reverted on empty guardian set");
+        throw new Error("Should have reverted on empty guardian set");
       } catch (error: any) {
         expect(error.message).to.include("guardian set empty");
       }
@@ -995,7 +995,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        expect.fail("Should have reverted on wrong index");
+        throw new Error("Should have reverted on wrong index");
       } catch (error: any) {
         expect(error.message).to.include("wrong index");
       }
@@ -1027,7 +1027,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        expect.fail("Should have reverted on invalid guardian set index");
+        throw new Error("Should have reverted on invalid guardian set index");
       } catch (error: any) {
         expect(error.message).to.include("invalid guardian set index");
       }
@@ -1074,7 +1074,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        expect.fail("Should have reverted on wrong governance chain");
+        throw new Error("Should have reverted on wrong governance chain");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance chain");
       }
@@ -1125,7 +1125,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        expect.fail("Should have reverted on wrong governance contract");
+        throw new Error("Should have reverted on wrong governance contract");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance contract");
       }
@@ -1161,7 +1161,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        expect.fail("Should have reverted on replay attack");
+        throw new Error("Should have reverted on replay attack");
       } catch (error: any) {
         expect(error.message).to.include("replay attack");
       }
@@ -1216,7 +1216,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitTransferFees(vm);
-        expect.fail("Should have reverted on invalid module");
+        throw new Error("Should have reverted on invalid module");
       } catch (error: any) {
         expect(error.message).to.include("invalid module");
       }
@@ -1245,7 +1245,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitTransferFees(vm);
-        expect.fail("Should have reverted on invalid chain");
+        throw new Error("Should have reverted on invalid chain");
       } catch (error: any) {
         expect(error.message).to.include("invalid chain");
       }
@@ -1274,7 +1274,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitTransferFees(vm);
-        expect.fail("Should have reverted on invalid EVM chain");
+        throw new Error("Should have reverted on invalid EVM chain");
       } catch (error: any) {
         expect(error.message).to.include("invalid EVM chain");
       }
@@ -1303,7 +1303,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitTransferFees(vm);
-        expect.fail("Should have reverted on invalid guardian set");
+        throw new Error("Should have reverted on invalid guardian set");
       } catch (error: any) {
         expect(error.message).to.include("invalid guardian set");
       }
@@ -1350,7 +1350,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitTransferFees(vm);
-        expect.fail("Should have reverted on wrong governance chain");
+        throw new Error("Should have reverted on wrong governance chain");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance chain");
       }
@@ -1398,7 +1398,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitTransferFees(vm);
-        expect.fail("Should have reverted on wrong governance contract");
+        throw new Error("Should have reverted on wrong governance contract");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance contract");
       }
@@ -1431,7 +1431,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitTransferFees(vm);
-        expect.fail("Should have reverted on replay attack");
+        throw new Error("Should have reverted on replay attack");
       } catch (error: any) {
         expect(error.message).to.include("replay attack");
       }
@@ -1480,7 +1480,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitRecoverChainId(vm);
-        expect.fail("Should have reverted when not a fork");
+        throw new Error("Should have reverted when not a fork");
       } catch (error: any) {
         expect(error.message).to.include("not a fork");
       }
@@ -1509,7 +1509,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitRecoverChainId(vm);
-        expect.fail("Should have reverted on invalid module");
+        throw new Error("Should have reverted on invalid module");
       } catch (error: any) {
         expect(error.message).to.include("invalid module");
       }
@@ -1537,7 +1537,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitRecoverChainId(vm);
-        expect.fail("Should have reverted on invalid EVM chain");
+        throw new Error("Should have reverted on invalid EVM chain");
       } catch (error: any) {
         expect(error.message).to.include("invalid EVM chain");
       }
@@ -1565,7 +1565,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitRecoverChainId(vm);
-        expect.fail("Should have reverted on invalid guardian set index");
+        throw new Error("Should have reverted on invalid guardian set index");
       } catch (error: any) {
         expect(error.message).to.include("invalid guardian set index");
       }
@@ -1611,7 +1611,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitRecoverChainId(vm);
-        expect.fail("Should have reverted on wrong governance chain");
+        throw new Error("Should have reverted on wrong governance chain");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance chain");
       }
@@ -1658,7 +1658,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitRecoverChainId(vm);
-        expect.fail("Should have reverted on wrong governance contract");
+        throw new Error("Should have reverted on wrong governance contract");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance contract");
       }
@@ -1690,7 +1690,7 @@ describe("Governance", function () {
       
       try {
         await proxied.submitRecoverChainId(vm);
-        expect.fail("Should have reverted on replay attack");
+        throw new Error("Should have reverted on replay attack");
       } catch (error: any) {
         expect(error.message).to.include("replay attack");
       }

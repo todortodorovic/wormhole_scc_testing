@@ -82,7 +82,7 @@ describe("Setup", function () {
       // Try to call initialize from alice account
       try {
         await proxied.connect(alice).initialize();
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("already initialized");
       }
@@ -100,7 +100,7 @@ describe("Setup", function () {
         // Try to call initialize from owner account
         try {
           await proxied.connect(owner).initialize();
-          expect.fail("Expected transaction to revert");
+          throw new Error("Expected transaction to revert");
         } catch (error: any) {
           expect(error.message).to.include("already initialized");
         }
@@ -108,7 +108,7 @@ describe("Setup", function () {
         // Try to call initialize from guardian account
         try {
           await proxied.connect(guardianWallet).initialize();
-          expect.fail("Expected transaction to revert");
+          throw new Error("Expected transaction to revert");
         } catch (error: any) {
           expect(error.message).to.include("already initialized");
         }
@@ -116,7 +116,7 @@ describe("Setup", function () {
         // Single signer scenario - just test one call
         try {
           await proxied.connect(owner).initialize();
-          expect.fail("Expected transaction to revert");
+          throw new Error("Expected transaction to revert");
         } catch (error: any) {
           expect(error.message).to.include("already initialized");
         }
@@ -139,7 +139,7 @@ describe("Setup", function () {
           governanceContract,   // governanceContract
           evmChainId            // evmChainId
         );
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("unsupported");
       }
@@ -160,7 +160,7 @@ describe("Setup", function () {
           "0x0000000000000000000000000000000000000000000000000000000000000005", // different governance contract
           evmChainId            // evmChainId
         );
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("unsupported");
       }
@@ -186,7 +186,7 @@ describe("Setup", function () {
             governanceContract,
             evmChainId
           );
-          expect.fail("Expected transaction to revert");
+          throw new Error("Expected transaction to revert");
         } catch (error: any) {
           expect(error.message).to.include("unsupported");
         }
@@ -202,7 +202,7 @@ describe("Setup", function () {
             governanceContract,
             evmChainId
           );
-          expect.fail("Expected transaction to revert");
+          throw new Error("Expected transaction to revert");
         } catch (error: any) {
           expect(error.message).to.include("unsupported");
         }
@@ -217,7 +217,7 @@ describe("Setup", function () {
             governanceContract,
             evmChainId
           );
-          expect.fail("Expected transaction to revert");
+          throw new Error("Expected transaction to revert");
         } catch (error: any) {
           expect(error.message).to.include("unsupported");
         }
@@ -255,7 +255,7 @@ describe("Setup", function () {
       // We can verify this by checking that initialize() reverts
       try {
         await proxied.initialize();
-        expect.fail("Expected transaction to revert");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("already initialized");
       }
@@ -292,7 +292,7 @@ describe("Setup", function () {
         // We'll use alice as the signer but conceptually test different addresses
         try {
           await proxied.connect(alice).initialize();
-          expect.fail(`Expected transaction to revert for address ${randomAddr}`);
+          throw new Error(`Expected transaction to revert for address ${randomAddr}`);
         } catch (error: any) {
           expect(error.message).to.include("already initialized", `Failed for address ${randomAddr}`);
         }
@@ -327,7 +327,7 @@ describe("Setup", function () {
             randomGovContract,
             evmChainId
           );
-          expect.fail(`Expected transaction to revert for iteration ${i}`);
+          throw new Error(`Expected transaction to revert for iteration ${i}`);
         } catch (error: any) {
           expect(error.message).to.include("unsupported", `Failed for iteration ${i} with params: impl=${randomImplementation}, chainId=${randomChainId}, govChainId=${randomGovChainId}, govContract=${randomGovContract}`);
         }
@@ -367,7 +367,7 @@ describe("Setup", function () {
               randomGovContract,
               evmChainId
             );
-            expect.fail(`Expected transaction to revert for signer ${signerIndex}, paramSet ${paramSet}`);
+            throw new Error(`Expected transaction to revert for signer ${signerIndex}, paramSet ${paramSet}`);
           } catch (error: any) {
             expect(error.message).to.include("unsupported", `Failed for signer ${signerIndex}, paramSet ${paramSet}`);
           }
@@ -407,7 +407,7 @@ describe("Setup", function () {
             randomGovContract,
             evmChainId
           );
-          expect.fail(`Expected transaction to revert for boundary test ${i}`);
+          throw new Error(`Expected transaction to revert for boundary test ${i}`);
         } catch (error: any) {
           expect(error.message).to.include("unsupported", `Failed for boundary test ${i}: chainId=${test.chainId}, govChainId=${test.govChainId}`);
         }
@@ -440,7 +440,7 @@ describe("Setup", function () {
             randomGovContract,
             evmChainId
           );
-          expect.fail(`Expected transaction to revert for ${guardianCount} guardians`);
+          throw new Error(`Expected transaction to revert for ${guardianCount} guardians`);
         } catch (error: any) {
           // Should revert with either "unsupported" (already setup) or "no guardians specified" (if 0 guardians)
           expect(error.message).to.satisfy(
@@ -463,7 +463,7 @@ describe("Setup", function () {
       for (let i = 0; i < 3; i++) {
         try {
           await proxied.connect(alice).initialize();
-          expect.fail(`Expected transaction to revert for iteration ${i}`);
+          throw new Error(`Expected transaction to revert for iteration ${i}`);
         } catch (error: any) {
           expect(error.message).to.include("already initialized");
         }
