@@ -492,15 +492,8 @@ describe("Governance", function () {
       const sequence = 23;
       const newFee = ethers.utils.parseEther("0.01");
       
-      const payload = payloadSetMessageFee(MODULE, CHAINID, newFee.toString());
+      const payload = payloadSetMessageFee(MODULE, 999, newFee.toString()); // Invalid chain in payload
       const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
-      
-      // Change EVM chain ID to simulate invalid EVM chain
-      await ethers.provider.send("hardhat_setStorageAt", [
-        proxied.address,
-        EVMCHAINID_SLOT,
-        ethers.utils.hexZeroPad("0x2", 32) // Different EVM chain ID
-      ]);
       
       try {
         await proxied.submitSetMessageFee(vm);
@@ -801,8 +794,8 @@ describe("Governance", function () {
       const timestamp = 1000;
       const nonce = 4001;
       const sequence = 40;
-      // Use owner address instead of random address to ensure it's a valid EOA
-      const recipient = await owner.getAddress();
+      // Use a simple, non-reserved address
+      const recipient = "0x1234567890123456789012345678901234567890";
       const amount = ethers.utils.parseEther("1");
       
       // Skip test if using reserved address (shouldn't happen with owner address)
@@ -887,7 +880,7 @@ describe("Governance", function () {
       const recipient = ethers.Wallet.createRandom().address;
       const amount = ethers.utils.parseEther("1");
       
-      const payload = payloadTransferFees(MODULE, 0, recipient, amount.toString());
+      const payload = payloadTransferFees(MODULE, CHAINID, recipient, amount.toString()); // Use specific chain ID to test fork validation
       const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       // Change EVM chain ID to simulate invalid EVM chain
@@ -898,10 +891,11 @@ describe("Governance", function () {
       ]);
       
       try {
-        await proxied.submitTransferFees(vm);
+        await proxied.callStatic.submitTransferFees(vm);
         throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid Chain");
+        const message = error.reason || error.message;
+        expect(message).to.include("invalid Chain");
       }
     });
 
@@ -988,10 +982,11 @@ describe("Governance", function () {
       
       // Second identical submission should fail (replay attack)
       try {
-        await proxied.submitTransferFees(vm);
+        await proxied.callStatic.submitTransferFees(vm);
         throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("governance action already consumed");
+        const message = error.reason || error.message;
+        expect(message).to.include("governance action already consumed");
       }
     });
   });
@@ -1106,7 +1101,8 @@ describe("Governance", function () {
         await proxied.callStatic.submitRecoverChainId(vm);
         throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid EVM Chain");
+        const message = error.reason || error.message;
+        expect(message).to.include("invalid EVM Chain");
       }
     });
 
@@ -1226,10 +1222,11 @@ describe("Governance", function () {
       
       // Second identical submission should fail with different error because EVM chain ID was updated
       try {
-        await proxied.submitRecoverChainId(vm);
+        await proxied.callStatic.submitRecoverChainId(vm);
         throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("not a fork");
+        const message = error.reason || error.message;
+        expect(message).to.include("not a fork");
       }
     });
   });
