@@ -3,8 +3,8 @@ import { ethers } from "hardhat";
 import { Contract, Signer } from "ethers";
 import { SigningKey } from "ethers/lib/utils";
 
-
 describe("Governance", function () {
+  this.timeout(60000);
   let proxy: Contract;
   let impl: Contract;
   let setup: Contract;
@@ -13,7 +13,7 @@ describe("Governance", function () {
   let alice: Signer;
 
   const CHAINID = 2;
-  const EVMCHAINID = 1;
+  let EVMCHAINID: number; // Will be dynamically set from network
   const MODULE = "0x00000000000000000000000000000000000000000000000000000000436f7265";
   const governanceContract = "0x0000000000000000000000000000000000000000000000000000000000000004";
   
@@ -32,121 +32,87 @@ describe("Governance", function () {
   const testGuardianPrivateKey = "0x" + ethers.BigNumber.from(testGuardian).toHexString().slice(2).padStart(64, '0');
   const testGuardianAddress = "0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe";
 
-  beforeEach(async function () {
-    const signers = await ethers.getSigners();
-    owner = signers[0];
-    alice = signers[1] || signers[0];
-
+  before(async function () {
+    this.timeout(60000);
     try {
-      // Create mock contracts
-      setup = {
-        address: "0x1111111111111111111111111111111111111111",
-        setup: async () => Promise.resolve()
-      } as any;
+      const signers = await ethers.getSigners();
+      
+      if (signers.length >= 2) {
+        [owner, alice] = signers;
+      } else {
+        owner = signers[0];
+        alice = signers.length > 1 ? signers[1] : signers[0];
+      }
+      
+      // Get current network chain ID for evmChainId
+      const network = await ethers.provider.getNetwork();
+      EVMCHAINID = network.chainId;
+      
+    } catch (error) {
+      throw error;
+    }
+  });
 
-      impl = {
-        address: "0x2222222222222222222222222222222222222222", 
-        initialize: async () => Promise.resolve()
-      } as any;
+  beforeEach(async function () {
+    this.timeout(60000);
+    
+    try {
+      // Deploy Setup contract
+      const SetupFactory = await ethers.getContractFactory("Setup", owner);
+      setup = await SetupFactory.deploy();
+      await setup.deployed();
 
-      proxy = {
-        address: "0x3333333333333333333333333333333333333333"
-      } as any;
+      // Deploy MyImplementation contract  
+      const ImplementationFactory = await ethers.getContractFactory("MyImplementation", owner);
+      impl = await ImplementationFactory.deploy(EVMCHAINID, CHAINID);
+      await impl.deployed();
 
-      // Create comprehensive mock proxied contract
-      proxied = {
-        address: proxy.address,
-        
-        // Contract upgrade functions
-        submitContractUpgrade: async (vm: string) => {
-          const vmData = parseVM(vm);
-          if (vmData.invalid) {
-            throw new Error(vmData.error || "invalid VM");
-          }
-          return Promise.resolve();
-        },
-        
-        getImplementation: async () => {
-          return "0x4444444444444444444444444444444444444444";
-        },
-        
-        isInitialized: async (address: string) => {
-          return true;
-        },
-        
-        governanceActionIsConsumed: async (hash: string) => {
-          return false;
-        },
+      // Deploy Wormhole proxy
+      const WormholeFactory = await ethers.getContractFactory("Wormhole", owner);
+      proxy = await WormholeFactory.deploy(setup.address, "0x");
+      await proxy.deployed();
 
-        // Message fee functions
-        submitSetMessageFee: async (vm: string) => {
-          const vmData = parseVM(vm);
-          if (vmData.invalid) {
-            throw new Error(vmData.error || "invalid VM");
-          }
-          return Promise.resolve();
-        },
+      // Create proxied setup instance
+      const proxiedSetup = await ethers.getContractAt("Setup", proxy.address, owner);
 
-        // Guardian set functions  
-        submitNewGuardianSet: async (vm: string) => {
-          const vmData = parseVM(vm);
-          if (vmData.invalid) {
-            throw new Error(vmData.error || "invalid VM");
-          }
-          return Promise.resolve();
-        },
+      // Initialize the proxy with guardian set
+      const keys = [testGuardianAddress];
+      
+      await proxiedSetup.setup(
+        impl.address,
+        keys,
+        CHAINID,
+        1, // governanceChainId
+        governanceContract,
+        EVMCHAINID
+      );
 
-        getCurrentGuardianSetIndex: async () => {
-          return 0;
-        },
-
-        getGuardianSet: async (index: number) => {
-          return {
-            keys: [testGuardianAddress],
-            expirationTime: 0
-          };
-        },
-
-        // Fee transfer functions
-        submitTransferFees: async (vm: string) => {
-          const vmData = parseVM(vm);
-          if (vmData.invalid) {
-            throw new Error(vmData.error || "invalid VM");
-          }
-          return Promise.resolve();
-        },
-
-        // Chain recovery functions
-        submitRecoverChainId: async (vm: string) => {
-          const vmData = parseVM(vm);
-          if (vmData.invalid) {
-            throw new Error(vmData.error || "invalid VM");
-          }
-          return Promise.resolve();
-        },
-
-        chainId: async () => CHAINID,
-        evmChainId: async () => EVMCHAINID
-      } as any;
-
+      // Create proxied implementation instance
+      proxied = await ethers.getContractAt("MyImplementation", proxy.address, owner);
+      
+      // Add delay to ensure proper setup
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
     } catch (error) {
       console.log("Setup error:", error);
-      // Create minimal fallback setup
-      proxied = {
-        address: "0x3333333333333333333333333333333333333333",
-        submitContractUpgrade: async () => { throw new Error("function not available"); },
-        getImplementation: async () => "0x4444444444444444444444444444444444444444",
-        isInitialized: async () => true,
-        governanceActionIsConsumed: async () => false
-      } as any;
+      throw error;
     }
   });
 
   // Helper functions
-  function createGovernanceVAA(timestamp: number, nonce: number, sequence: number, payload: string, guardianSetIndex: number = 0): string {
+  function createValidVm(
+    guardianSetIndex: number,
+    timestamp: number,
+    nonce: number,
+    emitterChainId: number,
+    emitterAddress: string,
+    sequence: number,
+    consistencyLevel: number,
+    payload: string
+  ): string {
     const body = ethers.utils.solidityPack(
       ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
-      [timestamp, nonce, 1, governanceContract, sequence, 15, payload]
+      [timestamp, nonce, emitterChainId, emitterAddress, sequence, consistencyLevel, payload]
     );
 
     const bodyHash = ethers.utils.keccak256(ethers.utils.keccak256(body));
@@ -180,7 +146,7 @@ describe("Governance", function () {
   }
 
   function payloadNewGuardianSet(module: string, chainId: number, guardianSetIndex: number, guardians: string[]): string {
-    const guardianData = guardians.map(g => ethers.utils.hexZeroPad(g, 20)).join('');
+    const guardianData = guardians.map(g => ethers.utils.hexZeroPad(g, 20).slice(2)).join('');
     return ethers.utils.solidityPack(
       ["bytes32", "uint8", "uint16", "uint32", "uint8", "bytes"],
       [module, 2, chainId, guardianSetIndex, guardians.length, "0x" + guardianData]
@@ -201,1510 +167,1076 @@ describe("Governance", function () {
     );
   }
 
-  function parseVM(vm: string): { invalid: boolean; error?: string } {
-    try {
-      // Basic VM validation
-      if (!vm || vm.length < 100) {
-        return { invalid: true, error: "invalid VM format" };
-      }
-      return { invalid: false };
-    } catch {
-      return { invalid: true, error: "VM parsing failed" };
-    }
+  function isReservedAddress(addr: string): boolean {
+    const reservedAddresses = [
+      "0x0000000000000000000000000000000000000001",
+      "0x0000000000000000000000000000000000000002",
+      "0x0000000000000000000000000000000000000003",
+      "0x0000000000000000000000000000000000000004",
+      "0x0000000000000000000000000000000000000005",
+      "0x0000000000000000000000000000000000000006",
+      "0x0000000000000000000000000000000000000007",
+      "0x0000000000000000000000000000000000000008",
+      "0x0000000000000000000000000000000000000009",
+      impl.address.toLowerCase(),
+      proxied.address.toLowerCase(),
+      setup.address.toLowerCase()
+    ];
+    return reservedAddresses.includes(addr.toLowerCase());
   }
 
-  function addressToBytes32(address: string): string {
-    return ethers.utils.hexZeroPad(address, 32);
-  }
-
-  it("should submit contract upgrade", async function () {
-    try {
+  describe("testSubmitContractUpgrade", function () {
+    it("should submit contract upgrade and update implementation", async function () {
       const timestamp = 1000;
       const nonce = 1001;
       const sequence = 1;
-      const newImplAddress = ethers.Wallet.createRandom().address;
       
-      const payload = payloadSubmitContract(MODULE, CHAINID, newImplAddress);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      // Deploy new implementation
+      const NewImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+      const newImpl = await NewImplFactory.deploy(EVMCHAINID, CHAINID);
+      await newImpl.deployed();
+      
+      const payload = payloadSubmitContract(MODULE, CHAINID, newImpl.address);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       await proxied.submitContractUpgrade(vm);
       
       // Verify upgrade was successful
-      expect(await proxied.getImplementation()).to.be.a('string');
-      expect(await proxied.isInitialized(newImplAddress)).to.be.true;
+      const currentImpl = await proxied.getImplementation();
+      expect(currentImpl.toLowerCase()).to.equal(newImpl.address.toLowerCase());
+      expect(await proxied.isInitialized(newImpl.address)).to.be.true;
       
-    } catch (error: any) {
-      // Contract upgrade might not be fully available in mock
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("method") ||
-        msg.includes("upgrade") ||
-        msg.includes("implementation")
+      // Verify action was consumed
+      const bodyHash = ethers.utils.keccak256(
+        ethers.utils.keccak256(
+          ethers.utils.solidityPack(
+            ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
+            [timestamp, nonce, 1, governanceContract, sequence, 15, payload]
+          )
+        )
       );
-    }
-  });
+      expect(await proxied.governanceActionIsConsumed(bodyHash)).to.be.true;
+    });
 
-  it("should emit ContractUpgraded event on upgrade", async function () {
-    try {
+    it("should emit ContractUpgraded event on upgrade", async function () {
       const timestamp = 1000;
       const nonce = 1002;
       const sequence = 2;
-      const newImplAddress = ethers.Wallet.createRandom().address;
       
-      const payload = payloadSubmitContract(MODULE, CHAINID, newImplAddress);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      // Deploy new implementation
+      const NewImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+      const newImpl = await NewImplFactory.deploy(EVMCHAINID, CHAINID);
+      await newImpl.deployed();
       
-      // Mock event emission check
+      const payload = payloadSubmitContract(MODULE, CHAINID, newImpl.address);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
+      
+      // Submit upgrade and verify event emission
       const tx = await proxied.submitContractUpgrade(vm);
+      const receipt = await tx.wait();
       
-      // In a real implementation, we would check for ContractUpgraded event
-      expect(tx).to.not.be.undefined;
-      
-    } catch (error: any) {
-      // Event emission testing might not be available
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("method") ||
-        msg.includes("upgrade") ||
-        msg.includes("event") ||
-        msg.includes("expected undefined not to be undefined")
-      );
-    }
-  });
+      // Check for ContractUpgraded event
+      const events = receipt.events?.filter((e: any) => e.event === "ContractUpgraded");
+      expect(events).to.not.be.undefined;
+      expect(events!.length).to.equal(1);
+      expect(events![0].args![0]).to.equal(impl.address);
+      expect(events![0].args![1]).to.equal(newImpl.address);
+    });
 
-  it("should revert initialize after upgrade", async function () {
-    try {
-      const newImplAddress = ethers.Wallet.createRandom().address;
+    it("should revert initialize after upgrade", async function () {
+      // Deploy new implementation
+      const NewImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+      const newImpl = await NewImplFactory.deploy(EVMCHAINID, CHAINID);
+      await newImpl.deployed();
       
-      // Try to initialize an already initialized implementation
+      const payload = payloadSubmitContract(MODULE, CHAINID, newImpl.address);
+      const vm = createValidVm(0, 1000, 1003, 1, governanceContract, 3, 15, payload);
+      
+      await proxied.submitContractUpgrade(vm);
+      
+      // Try to initialize again - should revert
       try {
-        await impl.initialize();
-        throw new Error("Should have reverted on double initialization");
+        await proxied.connect(alice).initialize();
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("initialized");
+        expect(error.message).to.include("already initialized");
       }
-      
-    } catch (error: any) {
-      // Initialize testing might not be available
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("method") ||
-        msg.includes("initialize") ||
-        msg.includes("initialized")
-      );
-    }
-  });
+    });
 
-  it("should revert contract upgrade on invalid fork", async function () {
-    try {
+    it("should revert contract upgrade on invalid fork", async function () {
       const timestamp = 1000;
-      const nonce = 1003;
-      const sequence = 3;
-      const newImplAddress = ethers.Wallet.createRandom().address;
+      const nonce = 1004;
+      const sequence = 4;
       
-      // Create upgrade payload for wrong chain (fork condition)
-      const payload = payloadSubmitContract(MODULE, 999, newImplAddress); // Wrong chain ID
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      // Deploy new implementation
+      const NewImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+      const newImpl = await NewImplFactory.deploy(EVMCHAINID, CHAINID);
+      await newImpl.deployed();
       
-      // Mock invalid fork response
-      proxied.submitContractUpgrade = async () => {
-        throw new Error("invalid fork");
-      };
+      const payload = payloadSubmitContract(MODULE, CHAINID, newImpl.address);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
+      
+      // Change EVM chain ID to simulate fork
+      await ethers.provider.send("hardhat_setStorageAt", [
+        proxied.address,
+        EVMCHAINID_SLOT,
+        ethers.utils.hexZeroPad("0x2", 32) // Different EVM chain ID
+      ]);
       
       try {
         await proxied.submitContractUpgrade(vm);
-        throw new Error("Should have reverted on invalid fork");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid fork");
       }
-      
-    } catch (error: any) {
-      // Fork validation might not be available
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("method") ||
-        msg.includes("fork") ||
-        msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert contract upgrade with invalid module", async function () {
-    try {
+    it("should revert contract upgrade with invalid module", async function () {
       const timestamp = 1000;
-      const nonce = 2001;
-      const sequence = 10;
-      const newImplAddress = ethers.Wallet.createRandom().address;
+      const nonce = 1005;
+      const sequence = 5;
       
-      // Create payload with invalid module
+      // Deploy new implementation
+      const NewImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+      const newImpl = await NewImplFactory.deploy(EVMCHAINID, CHAINID);
+      await newImpl.deployed();
+      
       const invalidModule = "0x0000000000000000000000000000000000000000000000000000000000000000";
-      const payload = payloadSubmitContract(invalidModule, CHAINID, newImplAddress);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
-      
-      // Mock invalid module response
-      proxied.submitContractUpgrade = async () => {
-        throw new Error("invalid module");
-      };
+      const payload = payloadSubmitContract(invalidModule, CHAINID, newImpl.address);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitContractUpgrade(vm);
-        throw new Error("Should have reverted on invalid module");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid module");
+        expect(error.message).to.include("Invalid Module");
       }
-      
-    } catch (error: any) {
-      // Module validation might not be available
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("method") ||
-        msg.includes("module") ||
-        msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert contract upgrade with invalid chain", async function () {
-    try {
+    it("should revert contract upgrade with invalid chain", async function () {
       const timestamp = 1000;
-      const nonce = 2002;
-      const sequence = 11;
-      const newImplAddress = ethers.Wallet.createRandom().address;
+      const nonce = 1006;
+      const sequence = 6;
       
-      // Create payload with invalid chain ID
-      const payload = payloadSubmitContract(MODULE, 999, newImplAddress); // Wrong chain
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      // Deploy new implementation
+      const NewImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+      const newImpl = await NewImplFactory.deploy(EVMCHAINID, CHAINID);
+      await newImpl.deployed();
       
-      // Mock invalid chain response
-      proxied.submitContractUpgrade = async () => {
-        throw new Error("invalid chain");
-      };
+      const payload = payloadSubmitContract(MODULE, 999, newImpl.address); // Invalid chain
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitContractUpgrade(vm);
-        throw new Error("Should have reverted on invalid chain");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid chain");
+        expect(error.message).to.include("Invalid Chain");
       }
-      
-    } catch (error: any) {
-      // Chain validation might not be available
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("method") ||
-        msg.includes("chain") ||
-        msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert contract upgrade with invalid guardian set index", async function () {
-    try {
+    it("should revert contract upgrade with invalid guardian set index", async function () {
       const timestamp = 1000;
-      const nonce = 2003;
-      const sequence = 12;
-      const newImplAddress = ethers.Wallet.createRandom().address;
+      const nonce = 1007;
+      const sequence = 7;
       
-      const payload = payloadSubmitContract(MODULE, CHAINID, newImplAddress);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload, 999); // Invalid guardian set
+      // Deploy new implementation
+      const NewImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+      const newImpl = await NewImplFactory.deploy(EVMCHAINID, CHAINID);
+      await newImpl.deployed();
       
-      // Mock invalid guardian set response
-      proxied.submitContractUpgrade = async () => {
-        throw new Error("invalid guardian set");
-      };
+      const payload = payloadSubmitContract(MODULE, CHAINID, newImpl.address);
+      const vm = createValidVm(999, timestamp, nonce, 1, governanceContract, sequence, 15, payload); // Invalid guardian set
       
       try {
         await proxied.submitContractUpgrade(vm);
-        throw new Error("Should have reverted on invalid guardian set");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid guardian set");
       }
-      
-    } catch (error: any) {
-      // Guardian set validation might not be available
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("method") ||
-        msg.includes("guardian") ||
-        msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert contract upgrade with wrong governance chain", async function () {
-    try {
+    it("should revert contract upgrade with wrong governance chain", async function () {
       const timestamp = 1000;
-      const nonce = 2004;
-      const sequence = 13;
-      const newImplAddress = ethers.Wallet.createRandom().address;
+      const nonce = 1008;
+      const sequence = 8;
       
-      const payload = payloadSubmitContract(MODULE, CHAINID, newImplAddress);
+      // Deploy new implementation
+      const NewImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+      const newImpl = await NewImplFactory.deploy(EVMCHAINID, CHAINID);
+      await newImpl.deployed();
       
-      // Create VAA from wrong governance chain
-      const wrongGovernanceContract = "0x0000000000000000000000000000000000000000000000000000000000000999";
-      const body = ethers.utils.solidityPack(
-        ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
-        [timestamp, nonce, 999, wrongGovernanceContract, sequence, 15, payload] // Wrong chain
-      );
-
-      const bodyHash = ethers.utils.keccak256(ethers.utils.keccak256(body));
-      const signingKey = new SigningKey(testGuardianPrivateKey);
-      const signature = signingKey.signDigest(bodyHash);
-      const formattedSignature = ethers.utils.solidityPack(
-        ["uint8", "bytes32", "bytes32", "uint8"],
-        [0, signature.r, signature.s, signature.recoveryParam]
-      );
-
-      const vm = ethers.utils.solidityPack(
-        ["uint8", "uint32", "uint8", "bytes", "bytes"],
-        [1, 0, 1, formattedSignature, body]
-      );
-      
-      // Mock wrong governance chain response
-      proxied.submitContractUpgrade = async () => {
-        throw new Error("wrong governance chain");
-      };
+      const payload = payloadSubmitContract(MODULE, CHAINID, newImpl.address);
+      const vm = createValidVm(0, timestamp, nonce, 999, governanceContract, sequence, 15, payload); // Wrong chain
       
       try {
         await proxied.submitContractUpgrade(vm);
-        throw new Error("Should have reverted on wrong governance chain");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance chain");
       }
-      
-    } catch (error: any) {
-      // Governance chain validation might not be available
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("method") ||
-        msg.includes("governance") ||
-        msg.includes("chain")
-      );
-    }
-  });
+    });
 
-  it("should revert contract upgrade with wrong governance contract", async function () {
-    try {
+    it("should revert contract upgrade with wrong governance contract", async function () {
       const timestamp = 1000;
-      const nonce = 2005;
-      const sequence = 14;
-      const newImplAddress = ethers.Wallet.createRandom().address;
+      const nonce = 1009;
+      const sequence = 9;
       
-      const payload = payloadSubmitContract(MODULE, CHAINID, newImplAddress);
+      // Deploy new implementation
+      const NewImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+      const newImpl = await NewImplFactory.deploy(EVMCHAINID, CHAINID);
+      await newImpl.deployed();
       
-      // Create VAA from wrong governance contract
       const wrongGovernanceContract = "0x0000000000000000000000000000000000000000000000000000000000000999";
-      const body = ethers.utils.solidityPack(
-        ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
-        [timestamp, nonce, 1, wrongGovernanceContract, sequence, 15, payload] // Wrong contract
-      );
-
-      const bodyHash = ethers.utils.keccak256(ethers.utils.keccak256(body));
-      const signingKey = new SigningKey(testGuardianPrivateKey);
-      const signature = signingKey.signDigest(bodyHash);
-      const formattedSignature = ethers.utils.solidityPack(
-        ["uint8", "bytes32", "bytes32", "uint8"],
-        [0, signature.r, signature.s, signature.recoveryParam]
-      );
-
-      const vm = ethers.utils.solidityPack(
-        ["uint8", "uint32", "uint8", "bytes", "bytes"],
-        [1, 0, 1, formattedSignature, body]
-      );
-      
-      // Mock wrong governance contract response
-      proxied.submitContractUpgrade = async () => {
-        throw new Error("wrong governance contract");
-      };
+      const payload = payloadSubmitContract(MODULE, CHAINID, newImpl.address);
+      const vm = createValidVm(0, timestamp, nonce, 1, wrongGovernanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitContractUpgrade(vm);
-        throw new Error("Should have reverted on wrong governance contract");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance contract");
       }
-      
-    } catch (error: any) {
-      // Governance contract validation might not be available
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("method") ||
-        msg.includes("governance") ||
-        msg.includes("contract")
-      );
-    }
-  });
+    });
 
-  it("should revert contract upgrade on replay attack", async function () {
-    try {
+    it("should revert contract upgrade on replay attack", async function () {
       const timestamp = 1000;
-      const nonce = 2006;
-      const sequence = 15;
-      const newImplAddress = ethers.Wallet.createRandom().address;
+      const nonce = 1010;
+      const sequence = 10;
       
-      const payload = payloadSubmitContract(MODULE, CHAINID, newImplAddress);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      // Deploy new implementation
+      const NewImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+      const newImpl = await NewImplFactory.deploy(EVMCHAINID, CHAINID);
+      await newImpl.deployed();
+      
+      const payload = payloadSubmitContract(MODULE, CHAINID, newImpl.address);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       // First upgrade should succeed
       await proxied.submitContractUpgrade(vm);
       
       // Second identical upgrade should fail (replay attack)
-      proxied.submitContractUpgrade = async () => {
-        throw new Error("replay attack");
-      };
-      
       try {
         await proxied.submitContractUpgrade(vm);
-        throw new Error("Should have reverted on replay attack");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("replay attack");
+        expect(error.message).to.include("governance action already consumed");
       }
-      
-    } catch (error: any) {
-      // Replay attack protection might not be available
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("method") ||
-        msg.includes("replay") ||
-        msg.includes("consumed")
-      );
-    }
+    });
   });
 
-  it("should submit set message fee", async function () {
-    try {
+  describe("testSubmitSetMessageFee", function () {
+    it("should submit set message fee", async function () {
       const timestamp = 1000;
-      const nonce = 3001;
+      const nonce = 2001;
       const sequence = 20;
       const newFee = ethers.utils.parseEther("0.01");
       
       const payload = payloadSetMessageFee(MODULE, CHAINID, newFee.toString());
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       await proxied.submitSetMessageFee(vm);
       
-      // Test passes if no revert
-      expect(true).to.be.true;
+      // Verify fee was set
+      expect((await proxied.messageFee()).toString()).to.equal(newFee.toString());
       
-    } catch (error: any) {
-      // Message fee setting might not be available in mock
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("method") ||
-        msg.includes("fee") ||
-        msg.includes("message")
+      // Verify action was consumed
+      const bodyHash = ethers.utils.keccak256(
+        ethers.utils.keccak256(
+          ethers.utils.solidityPack(
+            ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
+            [timestamp, nonce, 1, governanceContract, sequence, 15, payload]
+          )
+        )
       );
-    }
-  });
+      expect(await proxied.governanceActionIsConsumed(bodyHash)).to.be.true;
+    });
 
-  it("should revert set message fee with invalid module", async function () {
-    try {
+    it("should revert set message fee with invalid module", async function () {
       const timestamp = 1000;
-      const nonce = 3002;
+      const nonce = 2002;
       const sequence = 21;
       const newFee = ethers.utils.parseEther("0.01");
       
       const invalidModule = "0x0000000000000000000000000000000000000000000000000000000000000000";
       const payload = payloadSetMessageFee(invalidModule, CHAINID, newFee.toString());
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
-      
-      proxied.submitSetMessageFee = async () => {
-        throw new Error("invalid module");
-      };
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitSetMessageFee(vm);
-        throw new Error("Should have reverted on invalid module");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid module");
+        expect(error.message).to.include("Invalid Module");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("module") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert set message fee with invalid chain", async function () {
-    try {
+    it("should revert set message fee with invalid chain", async function () {
       const timestamp = 1000;
-      const nonce = 3003;
+      const nonce = 2003;
       const sequence = 22;
       const newFee = ethers.utils.parseEther("0.01");
       
-      const payload = payloadSetMessageFee(MODULE, 999, newFee.toString()); // Wrong chain
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
-      
-      proxied.submitSetMessageFee = async () => {
-        throw new Error("invalid chain");
-      };
+      const payload = payloadSetMessageFee(MODULE, 999, newFee.toString()); // Invalid chain
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitSetMessageFee(vm);
-        throw new Error("Should have reverted on invalid chain");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid chain");
+        expect(error.message).to.include("Invalid Chain");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("chain") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert set message fee with invalid EVM chain", async function () {
-    try {
+    it("should revert set message fee with invalid EVM chain", async function () {
       const timestamp = 1000;
-      const nonce = 3004;
+      const nonce = 2004;
       const sequence = 23;
       const newFee = ethers.utils.parseEther("0.01");
       
       const payload = payloadSetMessageFee(MODULE, CHAINID, newFee.toString());
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
-      // Mock invalid EVM chain condition
-      proxied.submitSetMessageFee = async () => {
-        throw new Error("invalid EVM chain");
-      };
+      // Change EVM chain ID to simulate invalid EVM chain
+      await ethers.provider.send("hardhat_setStorageAt", [
+        proxied.address,
+        EVMCHAINID_SLOT,
+        ethers.utils.hexZeroPad("0x2", 32) // Different EVM chain ID
+      ]);
       
       try {
         await proxied.submitSetMessageFee(vm);
-        throw new Error("Should have reverted on invalid EVM chain");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid EVM chain");
+        expect(error.message).to.include("Invalid Chain");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("EVM") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert set message fee with invalid guardian set index", async function () {
-    try {
+    it("should revert set message fee with invalid guardian set index", async function () {
       const timestamp = 1000;
-      const nonce = 3005;
+      const nonce = 2005;
       const sequence = 24;
       const newFee = ethers.utils.parseEther("0.01");
       
       const payload = payloadSetMessageFee(MODULE, CHAINID, newFee.toString());
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload, 999); // Invalid guardian set
-      
-      proxied.submitSetMessageFee = async () => {
-        throw new Error("invalid guardian set");
-      };
+      const vm = createValidVm(999, timestamp, nonce, 1, governanceContract, sequence, 15, payload); // Invalid guardian set
       
       try {
         await proxied.submitSetMessageFee(vm);
-        throw new Error("Should have reverted on invalid guardian set");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid guardian set");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("guardian") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert set message fee with wrong governance chain", async function () {
-    try {
+    it("should revert set message fee with wrong governance chain", async function () {
       const timestamp = 1000;
-      const nonce = 3006;
+      const nonce = 2006;
       const sequence = 25;
       const newFee = ethers.utils.parseEther("0.01");
       
       const payload = payloadSetMessageFee(MODULE, CHAINID, newFee.toString());
-      
-      // Create VAA from wrong governance chain
-      const body = ethers.utils.solidityPack(
-        ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
-        [timestamp, nonce, 999, governanceContract, sequence, 15, payload] // Wrong chain
-      );
-
-      const bodyHash = ethers.utils.keccak256(ethers.utils.keccak256(body));
-      const signingKey = new SigningKey(testGuardianPrivateKey);
-      const signature = signingKey.signDigest(bodyHash);
-      const formattedSignature = ethers.utils.solidityPack(
-        ["uint8", "bytes32", "bytes32", "uint8"],
-        [0, signature.r, signature.s, signature.recoveryParam]
-      );
-
-      const vm = ethers.utils.solidityPack(
-        ["uint8", "uint32", "uint8", "bytes", "bytes"],
-        [1, 0, 1, formattedSignature, body]
-      );
-      
-      proxied.submitSetMessageFee = async () => {
-        throw new Error("wrong governance chain");
-      };
+      const vm = createValidVm(0, timestamp, nonce, 999, governanceContract, sequence, 15, payload); // Wrong chain
       
       try {
         await proxied.submitSetMessageFee(vm);
-        throw new Error("Should have reverted on wrong governance chain");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance chain");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("governance") || msg.includes("chain")
-      );
-    }
-  });
+    });
 
-  it("should revert set message fee with wrong governance contract", async function () {
-    try {
+    it("should revert set message fee with wrong governance contract", async function () {
       const timestamp = 1000;
-      const nonce = 3007;
+      const nonce = 2007;
       const sequence = 26;
       const newFee = ethers.utils.parseEther("0.01");
       
-      const payload = payloadSetMessageFee(MODULE, CHAINID, newFee.toString());
-      
-      // Create VAA from wrong governance contract
       const wrongGovernanceContract = "0x0000000000000000000000000000000000000000000000000000000000000999";
-      const body = ethers.utils.solidityPack(
-        ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
-        [timestamp, nonce, 1, wrongGovernanceContract, sequence, 15, payload]
-      );
-
-      const bodyHash = ethers.utils.keccak256(ethers.utils.keccak256(body));
-      const signingKey = new SigningKey(testGuardianPrivateKey);
-      const signature = signingKey.signDigest(bodyHash);
-      const formattedSignature = ethers.utils.solidityPack(
-        ["uint8", "bytes32", "bytes32", "uint8"],
-        [0, signature.r, signature.s, signature.recoveryParam]
-      );
-
-      const vm = ethers.utils.solidityPack(
-        ["uint8", "uint32", "uint8", "bytes", "bytes"],
-        [1, 0, 1, formattedSignature, body]
-      );
-      
-      proxied.submitSetMessageFee = async () => {
-        throw new Error("wrong governance contract");
-      };
+      const payload = payloadSetMessageFee(MODULE, CHAINID, newFee.toString());
+      const vm = createValidVm(0, timestamp, nonce, 1, wrongGovernanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitSetMessageFee(vm);
-        throw new Error("Should have reverted on wrong governance contract");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance contract");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("governance") || msg.includes("contract")
-      );
-    }
-  });
+    });
 
-  it("should revert set message fee on replay attack", async function () {
-    try {
+    it("should revert set message fee on replay attack", async function () {
       const timestamp = 1000;
-      const nonce = 3008;
+      const nonce = 2008;
       const sequence = 27;
       const newFee = ethers.utils.parseEther("0.01");
       
       const payload = payloadSetMessageFee(MODULE, CHAINID, newFee.toString());
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       // First submission should succeed
       await proxied.submitSetMessageFee(vm);
       
       // Second identical submission should fail (replay attack)
-      proxied.submitSetMessageFee = async () => {
-        throw new Error("replay attack");
-      };
-      
       try {
         await proxied.submitSetMessageFee(vm);
-        throw new Error("Should have reverted on replay attack");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("replay attack");
+        expect(error.message).to.include("governance action already consumed");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("replay") || msg.includes("consumed")
-      );
-    }
+    });
   });
 
-  it("should submit new guardian set", async function () {
-    try {
+  describe("testSubmitNewGuardianSet", function () {
+    it("should submit new guardian set", async function () {
       const timestamp = 1000;
-      const nonce = 4001;
+      const nonce = 3001;
       const sequence = 30;
       const newGuardianSetIndex = 1;
-      const newGuardians = [ethers.Wallet.createRandom().address];
+      const newGuardians = ["0x1234567890123456789012345678901234567890"];
       
       const payload = payloadNewGuardianSet(MODULE, CHAINID, newGuardianSetIndex, newGuardians);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       await proxied.submitNewGuardianSet(vm);
       
-      expect(true).to.be.true;
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("guardian") || 
-        msg.includes("set") ||
-        msg.includes("invalid arrayify value")
+      // Verify action was consumed
+      const bodyHash = ethers.utils.keccak256(
+        ethers.utils.keccak256(
+          ethers.utils.solidityPack(
+            ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
+            [timestamp, nonce, 1, governanceContract, sequence, 15, payload]
+          )
+        )
       );
-    }
-  });
+      expect(await proxied.governanceActionIsConsumed(bodyHash)).to.be.true;
+      
+      // Verify new guardian set was set
+      const guardianSet = await proxied.getGuardianSet(newGuardianSetIndex);
+      // Guardian set returns an array where index 0 is the keys array
+      expect(guardianSet[0].length).to.equal(newGuardians.length);
+      expect(guardianSet[0][0]).to.equal(newGuardians[0]);
+      expect(await proxied.getCurrentGuardianSetIndex()).to.equal(newGuardianSetIndex);
+      
+      // Verify old guardian set has expiration time
+      const oldGuardianSet = await proxied.getGuardianSet(0);
+      expect(oldGuardianSet.expirationTime).to.be.gt(0);
+    });
 
-  it("should revert new guardian set with invalid module", async function () {
-    try {
+    it("should revert new guardian set with invalid module", async function () {
       const timestamp = 1000;
-      const nonce = 4002;
+      const nonce = 3002;
       const sequence = 31;
       const newGuardianSetIndex = 1;
-      const newGuardians = [ethers.Wallet.createRandom().address];
+      const newGuardians = ["0x1234567890123456789012345678901234567890"];
       
       const invalidModule = "0x0000000000000000000000000000000000000000000000000000000000000000";
       const payload = payloadNewGuardianSet(invalidModule, CHAINID, newGuardianSetIndex, newGuardians);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
-      
-      proxied.submitNewGuardianSet = async () => {
-        throw new Error("invalid module");
-      };
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        throw new Error("Should have reverted on invalid module");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid module");
+        expect(error.message).to.include("invalid Module");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("module") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert new guardian set with invalid chain", async function () {
-    try {
+    it("should revert new guardian set with invalid chain", async function () {
       const timestamp = 1000;
-      const nonce = 4003;
+      const nonce = 3003;
       const sequence = 32;
       const newGuardianSetIndex = 1;
-      const newGuardians = [ethers.Wallet.createRandom().address];
+      const newGuardians = ["0x1234567890123456789012345678901234567890"];
       
-      const payload = payloadNewGuardianSet(MODULE, 999, newGuardianSetIndex, newGuardians); // Wrong chain
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
-      
-      proxied.submitNewGuardianSet = async () => {
-        throw new Error("invalid chain");
-      };
+      const payload = payloadNewGuardianSet(MODULE, 999, newGuardianSetIndex, newGuardians); // Invalid chain
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        throw new Error("Should have reverted on invalid chain");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid chain");
+        expect(error.message).to.include("invalid Chain");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("chain") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert new guardian set with invalid EVM chain", async function () {
-    try {
+    it("should revert new guardian set with invalid EVM chain", async function () {
       const timestamp = 1000;
-      const nonce = 4004;
+      const nonce = 3004;
       const sequence = 33;
       const newGuardianSetIndex = 1;
-      const newGuardians = [ethers.Wallet.createRandom().address];
+      const newGuardians = ["0x1234567890123456789012345678901234567890"];
+      
+      // Change EVM chain ID to simulate invalid EVM chain BEFORE creating VM
+      await ethers.provider.send("hardhat_setStorageAt", [
+        proxied.address,
+        EVMCHAINID_SLOT,
+        ethers.utils.hexZeroPad("0x2", 32) // Different EVM chain ID
+      ]);
       
       const payload = payloadNewGuardianSet(MODULE, CHAINID, newGuardianSetIndex, newGuardians);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
-      
-      proxied.submitNewGuardianSet = async () => {
-        throw new Error("invalid EVM chain");
-      };
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        throw new Error("Should have reverted on invalid EVM chain");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid EVM chain");
+        expect(error.message).to.include("invalid Chain");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("EVM") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert new guardian set when guardian set is empty", async function () {
-    try {
+    it("should revert new guardian set when guardian set is empty", async function () {
       const timestamp = 1000;
-      const nonce = 4005;
+      const nonce = 3005;
       const sequence = 34;
       const newGuardianSetIndex = 1;
       const emptyGuardians: string[] = []; // Empty guardian set
       
       const payload = payloadNewGuardianSet(MODULE, CHAINID, newGuardianSetIndex, emptyGuardians);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
-      
-      proxied.submitNewGuardianSet = async () => {
-        throw new Error("guardian set empty");
-      };
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        throw new Error("Should have reverted on empty guardian set");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("guardian set empty");
+        expect(error.message).to.include("new guardian set is empty");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("guardian") || msg.includes("empty")
-      );
-    }
-  });
+    });
 
-  it("should revert new guardian set with wrong index", async function () {
-    try {
+    it("should revert new guardian set with wrong index", async function () {
       const timestamp = 1000;
-      const nonce = 4006;
+      const nonce = 3006;
       const sequence = 35;
       const wrongGuardianSetIndex = 999; // Wrong index
       const newGuardians = [ethers.Wallet.createRandom().address];
       
       const payload = payloadNewGuardianSet(MODULE, CHAINID, wrongGuardianSetIndex, newGuardians);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
-      
-      proxied.submitNewGuardianSet = async () => {
-        throw new Error("wrong index");
-      };
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        throw new Error("Should have reverted on wrong index");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("wrong index");
+        expect(error.message).to.include("index must increase in steps of 1");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("index") || 
-        msg.includes("wrong") ||
-        msg.includes("invalid arrayify value")
-      );
-    }
-  });
+    });
 
-  it("should revert new guardian set with invalid guardian set index", async function () {
-    try {
+    it("should revert new guardian set with invalid guardian set index", async function () {
       const timestamp = 1000;
-      const nonce = 4007;
+      const nonce = 3007;
       const sequence = 36;
       const newGuardianSetIndex = 1;
-      const newGuardians = [ethers.Wallet.createRandom().address];
+      const newGuardians = ["0x1234567890123456789012345678901234567890"];
       
       const payload = payloadNewGuardianSet(MODULE, CHAINID, newGuardianSetIndex, newGuardians);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload, 999); // Invalid guardian set index
-      
-      proxied.submitNewGuardianSet = async () => {
-        throw new Error("invalid guardian set index");
-      };
+      const vm = createValidVm(999, timestamp, nonce, 1, governanceContract, sequence, 15, payload); // Invalid guardian set index
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        throw new Error("Should have reverted on invalid guardian set index");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid guardian set index");
+        expect(error.message).to.include("invalid guardian set");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("guardian") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert new guardian set with wrong governance chain", async function () {
-    try {
+    it("should revert new guardian set with wrong governance chain", async function () {
       const timestamp = 1000;
-      const nonce = 4008;
+      const nonce = 3008;
       const sequence = 37;
       const newGuardianSetIndex = 1;
-      const newGuardians = [ethers.Wallet.createRandom().address];
+      const newGuardians = ["0x1234567890123456789012345678901234567890"];
       
       const payload = payloadNewGuardianSet(MODULE, CHAINID, newGuardianSetIndex, newGuardians);
-      
-      // Create VAA from wrong governance chain
-      const body = ethers.utils.solidityPack(
-        ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
-        [timestamp, nonce, 999, governanceContract, sequence, 15, payload] // Wrong chain
-      );
-
-      const bodyHash = ethers.utils.keccak256(ethers.utils.keccak256(body));
-      const signingKey = new SigningKey(testGuardianPrivateKey);
-      const signature = signingKey.signDigest(bodyHash);
-      const formattedSignature = ethers.utils.solidityPack(
-        ["uint8", "bytes32", "bytes32", "uint8"],
-        [0, signature.r, signature.s, signature.recoveryParam]
-      );
-
-      const vm = ethers.utils.solidityPack(
-        ["uint8", "uint32", "uint8", "bytes", "bytes"],
-        [1, 0, 1, formattedSignature, body]
-      );
-      
-      proxied.submitNewGuardianSet = async () => {
-        throw new Error("wrong governance chain");
-      };
+      const vm = createValidVm(0, timestamp, nonce, 999, governanceContract, sequence, 15, payload); // Wrong chain
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        throw new Error("Should have reverted on wrong governance chain");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance chain");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("governance") || 
-        msg.includes("chain") ||
-        msg.includes("invalid arrayify value")
-      );
-    }
-  });
+    });
 
-  it("should revert new guardian set with wrong governance contract", async function () {
-    try {
+    it("should revert new guardian set with wrong governance contract", async function () {
       const timestamp = 1000;
-      const nonce = 4009;
+      const nonce = 3009;
       const sequence = 38;
       const newGuardianSetIndex = 1;
-      const newGuardians = [ethers.Wallet.createRandom().address];
+      const newGuardians = ["0x1234567890123456789012345678901234567890"];
       
-      const payload = payloadNewGuardianSet(MODULE, CHAINID, newGuardianSetIndex, newGuardians);
-      
-      // Create VAA from wrong governance contract
       const wrongGovernanceContract = "0x0000000000000000000000000000000000000000000000000000000000000999";
-      const body = ethers.utils.solidityPack(
-        ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
-        [timestamp, nonce, 1, wrongGovernanceContract, sequence, 15, payload]
-      );
-
-      const bodyHash = ethers.utils.keccak256(ethers.utils.keccak256(body));
-      const signingKey = new SigningKey(testGuardianPrivateKey);
-      const signature = signingKey.signDigest(bodyHash);
-      const formattedSignature = ethers.utils.solidityPack(
-        ["uint8", "bytes32", "bytes32", "uint8"],
-        [0, signature.r, signature.s, signature.recoveryParam]
-      );
-
-      const vm = ethers.utils.solidityPack(
-        ["uint8", "uint32", "uint8", "bytes", "bytes"],
-        [1, 0, 1, formattedSignature, body]
-      );
-      
-      proxied.submitNewGuardianSet = async () => {
-        throw new Error("wrong governance contract");
-      };
+      const payload = payloadNewGuardianSet(MODULE, CHAINID, newGuardianSetIndex, newGuardians);
+      const vm = createValidVm(0, timestamp, nonce, 1, wrongGovernanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitNewGuardianSet(vm);
-        throw new Error("Should have reverted on wrong governance contract");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance contract");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("governance") || 
-        msg.includes("contract") ||
-        msg.includes("invalid arrayify value")
-      );
-    }
-  });
+    });
 
-  it("should revert new guardian set on replay attack", async function () {
-    try {
+    it("should revert new guardian set on replay attack", async function () {
       const timestamp = 1000;
-      const nonce = 4010;
+      const nonce = 3010;
       const sequence = 39;
       const newGuardianSetIndex = 1;
-      const newGuardians = [ethers.Wallet.createRandom().address];
+      const newGuardians = ["0x1234567890123456789012345678901234567890"];
       
       const payload = payloadNewGuardianSet(MODULE, CHAINID, newGuardianSetIndex, newGuardians);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       // First submission should succeed
       await proxied.submitNewGuardianSet(vm);
       
-      // Second identical submission should fail (replay attack)
-      proxied.submitNewGuardianSet = async () => {
-        throw new Error("replay attack");
-      };
-      
+      // Second identical submission should fail with different error because guardian set index changed
       try {
         await proxied.submitNewGuardianSet(vm);
-        throw new Error("Should have reverted on replay attack");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("replay attack");
+        expect(error.message).to.include("not signed by current guardian set");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || 
-        msg.includes("replay") || 
-        msg.includes("consumed") ||
-        msg.includes("invalid arrayify value")
-      );
-    }
+    });
   });
 
-  it("should submit transfer fees", async function () {
-    try {
+  describe("testSubmitTransferFees", function () {
+    it("should submit transfer fees", async function () {
       const timestamp = 1000;
-      const nonce = 5001;
+      const nonce = 4001;
       const sequence = 40;
-      const recipient = ethers.Wallet.createRandom().address;
+      // Use owner address instead of random address to ensure it's a valid EOA
+      const recipient = await owner.getAddress();
       const amount = ethers.utils.parseEther("1");
       
-      const payload = payloadTransferFees(MODULE, CHAINID, recipient, amount.toString());
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      // Skip test if using reserved address (shouldn't happen with owner address)
+      if (isReservedAddress(recipient)) {
+        return;
+      }
       
-      await proxied.submitTransferFees(vm);
+      // Fund the proxied contract using hardhat_setBalance
+      await ethers.provider.send("hardhat_setBalance", [
+        proxied.address,
+        ethers.utils.hexValue(amount.mul(10)) // Give extra balance for gas costs
+      ]);
       
-      expect(true).to.be.true;
+      // Use chain ID 0 for global operation as per Governance.sol line 131
+      const payload = payloadTransferFees(MODULE, 0, recipient, amount.toString());
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("transfer") || msg.includes("fee")
+      const recipientBalanceBefore = await ethers.provider.getBalance(recipient);
+      
+      await proxied.submitTransferFees(vm, { gasLimit: 500000 });
+      
+      const recipientBalanceAfter = await ethers.provider.getBalance(recipient);
+      
+      // Verify transfer occurred
+      expect(recipientBalanceAfter.sub(recipientBalanceBefore)).to.equal(amount);
+      // Contract should have leftover balance from the extra funding
+      expect(await ethers.provider.getBalance(proxied.address)).to.equal(amount.mul(9));
+      
+      // Verify action was consumed
+      const bodyHash = ethers.utils.keccak256(
+        ethers.utils.keccak256(
+          ethers.utils.solidityPack(
+            ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
+            [timestamp, nonce, 1, governanceContract, sequence, 15, payload]
+          )
+        )
       );
-    }
-  });
+      expect(await proxied.governanceActionIsConsumed(bodyHash)).to.be.true;
+    });
 
-  it("should revert transfer fees with invalid module", async function () {
-    try {
+    it("should revert transfer fees with invalid module", async function () {
       const timestamp = 1000;
-      const nonce = 5002;
+      const nonce = 4002;
       const sequence = 41;
       const recipient = ethers.Wallet.createRandom().address;
       const amount = ethers.utils.parseEther("1");
       
       const invalidModule = "0x0000000000000000000000000000000000000000000000000000000000000000";
-      const payload = payloadTransferFees(invalidModule, CHAINID, recipient, amount.toString());
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
-      
-      proxied.submitTransferFees = async () => {
-        throw new Error("invalid module");
-      };
+      const payload = payloadTransferFees(invalidModule, 0, recipient, amount.toString());
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitTransferFees(vm);
-        throw new Error("Should have reverted on invalid module");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid module");
+        expect(error.message).to.include("invalid Module");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("module") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert transfer fees with invalid chain", async function () {
-    try {
+    it("should revert transfer fees with invalid chain", async function () {
       const timestamp = 1000;
-      const nonce = 5003;
+      const nonce = 4003;
       const sequence = 42;
       const recipient = ethers.Wallet.createRandom().address;
       const amount = ethers.utils.parseEther("1");
       
-      const payload = payloadTransferFees(MODULE, 999, recipient, amount.toString()); // Wrong chain
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
-      
-      proxied.submitTransferFees = async () => {
-        throw new Error("invalid chain");
-      };
+      const payload = payloadTransferFees(MODULE, 999, recipient, amount.toString()); // Invalid chain
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitTransferFees(vm);
-        throw new Error("Should have reverted on invalid chain");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid chain");
+        expect(error.message).to.include("invalid Chain");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("chain") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert transfer fees with invalid EVM chain", async function () {
-    try {
+    it("should revert transfer fees with invalid EVM chain", async function () {
       const timestamp = 1000;
-      const nonce = 5004;
+      const nonce = 4004;
       const sequence = 43;
       const recipient = ethers.Wallet.createRandom().address;
       const amount = ethers.utils.parseEther("1");
       
-      const payload = payloadTransferFees(MODULE, CHAINID, recipient, amount.toString());
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      const payload = payloadTransferFees(MODULE, 0, recipient, amount.toString());
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
-      proxied.submitTransferFees = async () => {
-        throw new Error("invalid EVM chain");
-      };
+      // Change EVM chain ID to simulate invalid EVM chain
+      await ethers.provider.send("hardhat_setStorageAt", [
+        proxied.address,
+        EVMCHAINID_SLOT,
+        ethers.utils.hexZeroPad("0x2", 32) // Different EVM chain ID
+      ]);
       
       try {
         await proxied.submitTransferFees(vm);
-        throw new Error("Should have reverted on invalid EVM chain");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid EVM chain");
+        expect(error.message).to.include("invalid Chain");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("EVM") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert transfer fees with invalid guardian set", async function () {
-    try {
+    it("should revert transfer fees with invalid guardian set", async function () {
       const timestamp = 1000;
-      const nonce = 5005;
+      const nonce = 4005;
       const sequence = 44;
       const recipient = ethers.Wallet.createRandom().address;
       const amount = ethers.utils.parseEther("1");
       
-      const payload = payloadTransferFees(MODULE, CHAINID, recipient, amount.toString());
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload, 999); // Invalid guardian set
-      
-      proxied.submitTransferFees = async () => {
-        throw new Error("invalid guardian set");
-      };
+      const payload = payloadTransferFees(MODULE, 0, recipient, amount.toString());
+      const vm = createValidVm(999, timestamp, nonce, 1, governanceContract, sequence, 15, payload); // Invalid guardian set
       
       try {
         await proxied.submitTransferFees(vm);
-        throw new Error("Should have reverted on invalid guardian set");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("invalid guardian set");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("guardian") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert transfer fees with wrong governance chain", async function () {
-    try {
+    it("should revert transfer fees with wrong governance chain", async function () {
       const timestamp = 1000;
-      const nonce = 5006;
+      const nonce = 4006;
       const sequence = 45;
       const recipient = ethers.Wallet.createRandom().address;
       const amount = ethers.utils.parseEther("1");
       
-      const payload = payloadTransferFees(MODULE, CHAINID, recipient, amount.toString());
-      
-      // Create VAA from wrong governance chain
-      const body = ethers.utils.solidityPack(
-        ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
-        [timestamp, nonce, 999, governanceContract, sequence, 15, payload] // Wrong chain
-      );
-
-      const bodyHash = ethers.utils.keccak256(ethers.utils.keccak256(body));
-      const signingKey = new SigningKey(testGuardianPrivateKey);
-      const signature = signingKey.signDigest(bodyHash);
-      const formattedSignature = ethers.utils.solidityPack(
-        ["uint8", "bytes32", "bytes32", "uint8"],
-        [0, signature.r, signature.s, signature.recoveryParam]
-      );
-
-      const vm = ethers.utils.solidityPack(
-        ["uint8", "uint32", "uint8", "bytes", "bytes"],
-        [1, 0, 1, formattedSignature, body]
-      );
-      
-      proxied.submitTransferFees = async () => {
-        throw new Error("wrong governance chain");
-      };
+      const payload = payloadTransferFees(MODULE, 0, recipient, amount.toString());
+      const vm = createValidVm(0, timestamp, nonce, 999, governanceContract, sequence, 15, payload); // Wrong chain
       
       try {
         await proxied.submitTransferFees(vm);
-        throw new Error("Should have reverted on wrong governance chain");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance chain");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("governance") || msg.includes("chain")
-      );
-    }
-  });
+    });
 
-  it("should revert transfer fees with wrong governance contract", async function () {
-    try {
+    it("should revert transfer fees with wrong governance contract", async function () {
       const timestamp = 1000;
-      const nonce = 5007;
+      const nonce = 4007;
       const sequence = 46;
       const recipient = ethers.Wallet.createRandom().address;
       const amount = ethers.utils.parseEther("1");
       
-      const payload = payloadTransferFees(MODULE, CHAINID, recipient, amount.toString());
-      
-      // Create VAA from wrong governance contract
       const wrongGovernanceContract = "0x0000000000000000000000000000000000000000000000000000000000000999";
-      const body = ethers.utils.solidityPack(
-        ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
-        [timestamp, nonce, 1, wrongGovernanceContract, sequence, 15, payload]
-      );
-
-      const bodyHash = ethers.utils.keccak256(ethers.utils.keccak256(body));
-      const signingKey = new SigningKey(testGuardianPrivateKey);
-      const signature = signingKey.signDigest(bodyHash);
-      const formattedSignature = ethers.utils.solidityPack(
-        ["uint8", "bytes32", "bytes32", "uint8"],
-        [0, signature.r, signature.s, signature.recoveryParam]
-      );
-
-      const vm = ethers.utils.solidityPack(
-        ["uint8", "uint32", "uint8", "bytes", "bytes"],
-        [1, 0, 1, formattedSignature, body]
-      );
-      
-      proxied.submitTransferFees = async () => {
-        throw new Error("wrong governance contract");
-      };
+      const payload = payloadTransferFees(MODULE, 0, recipient, amount.toString());
+      const vm = createValidVm(0, timestamp, nonce, 1, wrongGovernanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitTransferFees(vm);
-        throw new Error("Should have reverted on wrong governance contract");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance contract");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("governance") || msg.includes("contract")
-      );
-    }
-  });
+    });
 
-  it("should revert transfer fees on replay attack", async function () {
-    try {
+    it("should revert transfer fees on replay attack", async function () {
       const timestamp = 1000;
-      const nonce = 5008;
+      const nonce = 4008;
       const sequence = 47;
-      const recipient = ethers.Wallet.createRandom().address;
+      // Use a simple, non-reserved address
+      const recipient = "0x1234567890123456789012345678901234567890";
       const amount = ethers.utils.parseEther("1");
       
-      const payload = payloadTransferFees(MODULE, CHAINID, recipient, amount.toString());
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      // Skip test if using reserved address (shouldn't happen with fixed address)
+      if (isReservedAddress(recipient)) {
+        return;
+      }
+      
+      // Fund the proxied contract using hardhat_setBalance
+      await ethers.provider.send("hardhat_setBalance", [
+        proxied.address,
+        ethers.utils.hexValue(amount.mul(10)) // Fund for both attempts with extra for gas
+      ]);
+      
+      // Use chain ID 0 for global operation as per Governance.sol line 131
+      const payload = payloadTransferFees(MODULE, 0, recipient, amount.toString());
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       // First submission should succeed
       await proxied.submitTransferFees(vm);
       
       // Second identical submission should fail (replay attack)
-      proxied.submitTransferFees = async () => {
-        throw new Error("replay attack");
-      };
-      
       try {
         await proxied.submitTransferFees(vm);
-        throw new Error("Should have reverted on replay attack");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("replay attack");
+        expect(error.message).to.include("governance action already consumed");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("replay") || msg.includes("consumed")
-      );
-    }
+    });
   });
 
-  it("should submit recover chain ID", async function () {
-    try {
+  describe("testSubmitRecoverChainId", function () {
+    it("should submit recover chain ID", async function () {
       const timestamp = 1000;
-      const nonce = 6001;
+      const nonce = 5001;
       const sequence = 50;
       const newChainId = 3;
+      const forkEvmChainId = 999; // Different from current EVMCHAINID
       
-      const payload = payloadRecoverChainId(MODULE, EVMCHAINID, newChainId);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      // Get current block.chainid to use in payload as required by line 161
+      const network = await ethers.provider.getNetwork();
+      const currentChainId = network.chainId;
+      
+      const payload = payloadRecoverChainId(MODULE, currentChainId, newChainId);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
+      
+      // Simulate being on a fork by changing the EVM chain ID to be different than block.chainid
+      await ethers.provider.send("hardhat_setStorageAt", [
+        proxied.address,
+        EVMCHAINID_SLOT,
+        ethers.utils.hexZeroPad(ethers.BigNumber.from(forkEvmChainId).toHexString(), 32)
+      ]);
       
       await proxied.submitRecoverChainId(vm);
       
-      expect(true).to.be.true;
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("recover") || msg.includes("chain")
+      // Verify action was consumed
+      const bodyHash = ethers.utils.keccak256(
+        ethers.utils.keccak256(
+          ethers.utils.solidityPack(
+            ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
+            [timestamp, nonce, 1, governanceContract, sequence, 15, payload]
+          )
+        )
       );
-    }
-  });
+      expect(await proxied.governanceActionIsConsumed(bodyHash)).to.be.true;
+      
+      // Verify chain IDs were updated
+      expect((await proxied.evmChainId()).toString()).to.equal(currentChainId.toString()); // Contract sets evmChainId to rci.evmChainId from payload
+      expect(await proxied.chainId()).to.equal(newChainId);
+    });
 
-  it("should revert recover chain ID when not a fork", async function () {
-    try {
+    it("should revert recover chain ID when not a fork", async function () {
       const timestamp = 1000;
-      const nonce = 6002;
+      const nonce = 5002;
       const sequence = 51;
       const newChainId = 3;
       
-      const payload = payloadRecoverChainId(MODULE, EVMCHAINID, newChainId);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
-      
-      proxied.submitRecoverChainId = async () => {
-        throw new Error("not a fork");
-      };
+      const payload = payloadRecoverChainId(MODULE, EVMCHAINID, newChainId); // Same as current EVM chain ID
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
       try {
         await proxied.submitRecoverChainId(vm);
-        throw new Error("Should have reverted when not a fork");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("not a fork");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("fork") || msg.includes("recover")
-      );
-    }
-  });
+    });
 
-  it("should revert recover chain ID with invalid module", async function () {
-    try {
+    it("should revert recover chain ID with invalid module", async function () {
       const timestamp = 1000;
-      const nonce = 6003;
+      const nonce = 5003;
       const sequence = 52;
       const newChainId = 3;
+      const forkEvmChainId = 999;
+      
+      // Use current block.chainid as required by line 161 in Governance.sol
+      const network = await ethers.provider.getNetwork();
+      const currentChainId = network.chainId;
       
       const invalidModule = "0x0000000000000000000000000000000000000000000000000000000000000000";
-      const payload = payloadRecoverChainId(invalidModule, EVMCHAINID, newChainId);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      const payload = payloadRecoverChainId(invalidModule, currentChainId, newChainId);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
-      proxied.submitRecoverChainId = async () => {
-        throw new Error("invalid module");
-      };
+      // Make sure contract is in fork state
+      await ethers.provider.send("hardhat_setStorageAt", [
+        proxied.address,
+        EVMCHAINID_SLOT,
+        ethers.utils.hexZeroPad(ethers.BigNumber.from(forkEvmChainId).toHexString(), 32)
+      ]);
       
       try {
-        await proxied.submitRecoverChainId(vm);
-        throw new Error("Should have reverted on invalid module");
+        await proxied.callStatic.submitRecoverChainId(vm);
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid module");
+        const message = error.reason || error.message;
+        expect(message).to.include("invalid Module");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("module") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert recover chain ID with invalid EVM chain", async function () {
-    try {
+    it("should revert recover chain ID with invalid EVM chain", async function () {
       const timestamp = 1000;
-      const nonce = 6004;
+      const nonce = 5004;
       const sequence = 53;
       const newChainId = 3;
+      const forkEvmChainId = 999;
+      const wrongEvmChainId = 888; // Different from both current chain and fork chain
       
-      const payload = payloadRecoverChainId(MODULE, 999, newChainId); // Invalid EVM chain
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      const payload = payloadRecoverChainId(MODULE, wrongEvmChainId, newChainId);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
       
-      proxied.submitRecoverChainId = async () => {
-        throw new Error("invalid EVM chain");
-      };
+      // Make sure contract is in fork state 
+      await ethers.provider.send("hardhat_setStorageAt", [
+        proxied.address,
+        EVMCHAINID_SLOT,
+        ethers.utils.hexZeroPad(ethers.BigNumber.from(forkEvmChainId).toHexString(), 32)
+      ]);
       
       try {
-        await proxied.submitRecoverChainId(vm);
-        throw new Error("Should have reverted on invalid EVM chain");
+        await proxied.callStatic.submitRecoverChainId(vm);
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid EVM chain");
+        expect(error.message).to.include("invalid EVM Chain");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("EVM") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert recover chain ID with invalid guardian set index", async function () {
-    try {
+    it("should revert recover chain ID with invalid guardian set index", async function () {
       const timestamp = 1000;
-      const nonce = 6005;
+      const nonce = 5005;
       const sequence = 54;
       const newChainId = 3;
+      const forkEvmChainId = 999;
       
-      const payload = payloadRecoverChainId(MODULE, EVMCHAINID, newChainId);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload, 999); // Invalid guardian set
+      // Use current block.chainid in payload
+      const network = await ethers.provider.getNetwork();
+      const currentChainId = network.chainId;
       
-      proxied.submitRecoverChainId = async () => {
-        throw new Error("invalid guardian set index");
-      };
+      const payload = payloadRecoverChainId(MODULE, currentChainId, newChainId);
+      const vm = createValidVm(999, timestamp, nonce, 1, governanceContract, sequence, 15, payload); // Invalid guardian set
+      
+      // Make sure contract is in fork state
+      await ethers.provider.send("hardhat_setStorageAt", [
+        proxied.address,
+        EVMCHAINID_SLOT,
+        ethers.utils.hexZeroPad(ethers.BigNumber.from(forkEvmChainId).toHexString(), 32)
+      ]);
       
       try {
-        await proxied.submitRecoverChainId(vm);
-        throw new Error("Should have reverted on invalid guardian set index");
+        await proxied.callStatic.submitRecoverChainId(vm);
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("invalid guardian set index");
+        const message = error.reason || error.message;
+        expect(message).to.include("invalid guardian set");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("guardian") || msg.includes("invalid")
-      );
-    }
-  });
+    });
 
-  it("should revert recover chain ID with wrong governance chain", async function () {
-    try {
+    it("should revert recover chain ID with wrong governance chain", async function () {
       const timestamp = 1000;
-      const nonce = 6006;
+      const nonce = 5006;
       const sequence = 55;
       const newChainId = 3;
+      const forkEvmChainId = 999;
       
-      const payload = payloadRecoverChainId(MODULE, EVMCHAINID, newChainId);
+      // Use current block.chainid in payload
+      const network = await ethers.provider.getNetwork();
+      const currentChainId = network.chainId;
       
-      // Create VAA from wrong governance chain
-      const body = ethers.utils.solidityPack(
-        ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
-        [timestamp, nonce, 999, governanceContract, sequence, 15, payload] // Wrong chain
-      );
-
-      const bodyHash = ethers.utils.keccak256(ethers.utils.keccak256(body));
-      const signingKey = new SigningKey(testGuardianPrivateKey);
-      const signature = signingKey.signDigest(bodyHash);
-      const formattedSignature = ethers.utils.solidityPack(
-        ["uint8", "bytes32", "bytes32", "uint8"],
-        [0, signature.r, signature.s, signature.recoveryParam]
-      );
-
-      const vm = ethers.utils.solidityPack(
-        ["uint8", "uint32", "uint8", "bytes", "bytes"],
-        [1, 0, 1, formattedSignature, body]
-      );
+      const payload = payloadRecoverChainId(MODULE, currentChainId, newChainId);
+      const vm = createValidVm(0, timestamp, nonce, 999, governanceContract, sequence, 15, payload); // Wrong chain
       
-      proxied.submitRecoverChainId = async () => {
-        throw new Error("wrong governance chain");
-      };
+      // Make sure contract is in fork state
+      await ethers.provider.send("hardhat_setStorageAt", [
+        proxied.address,
+        EVMCHAINID_SLOT,
+        ethers.utils.hexZeroPad(ethers.BigNumber.from(forkEvmChainId).toHexString(), 32)
+      ]);
       
       try {
-        await proxied.submitRecoverChainId(vm);
-        throw new Error("Should have reverted on wrong governance chain");
+        await proxied.callStatic.submitRecoverChainId(vm);
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
         expect(error.message).to.include("wrong governance chain");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("governance") || msg.includes("chain")
-      );
-    }
-  });
+    });
 
-  it("should revert recover chain ID with wrong governance contract", async function () {
-    try {
+    it("should revert recover chain ID with wrong governance contract", async function () {
       const timestamp = 1000;
-      const nonce = 6007;
+      const nonce = 5007;
       const sequence = 56;
       const newChainId = 3;
+      const forkEvmChainId = 999;
       
-      const payload = payloadRecoverChainId(MODULE, EVMCHAINID, newChainId);
+      // Use current block.chainid in payload
+      const network = await ethers.provider.getNetwork();
+      const currentChainId = network.chainId;
       
-      // Create VAA from wrong governance contract
       const wrongGovernanceContract = "0x0000000000000000000000000000000000000000000000000000000000000999";
-      const body = ethers.utils.solidityPack(
-        ["uint32", "uint32", "uint16", "bytes32", "uint64", "uint8", "bytes"],
-        [timestamp, nonce, 1, wrongGovernanceContract, sequence, 15, payload]
-      );
-
-      const bodyHash = ethers.utils.keccak256(ethers.utils.keccak256(body));
-      const signingKey = new SigningKey(testGuardianPrivateKey);
-      const signature = signingKey.signDigest(bodyHash);
-      const formattedSignature = ethers.utils.solidityPack(
-        ["uint8", "bytes32", "bytes32", "uint8"],
-        [0, signature.r, signature.s, signature.recoveryParam]
-      );
-
-      const vm = ethers.utils.solidityPack(
-        ["uint8", "uint32", "uint8", "bytes", "bytes"],
-        [1, 0, 1, formattedSignature, body]
-      );
+      const payload = payloadRecoverChainId(MODULE, currentChainId, newChainId);
+      const vm = createValidVm(0, timestamp, nonce, 1, wrongGovernanceContract, sequence, 15, payload);
       
-      proxied.submitRecoverChainId = async () => {
-        throw new Error("wrong governance contract");
-      };
+      // Make sure contract is in fork state
+      await ethers.provider.send("hardhat_setStorageAt", [
+        proxied.address,
+        EVMCHAINID_SLOT,
+        ethers.utils.hexZeroPad(ethers.BigNumber.from(forkEvmChainId).toHexString(), 32)
+      ]);
       
       try {
-        await proxied.submitRecoverChainId(vm);
-        throw new Error("Should have reverted on wrong governance contract");
+        await proxied.callStatic.submitRecoverChainId(vm);
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("wrong governance contract");
+        const message = error.reason || error.message;
+        expect(message).to.include("wrong governance contract");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("governance") || msg.includes("contract")
-      );
-    }
-  });
+    });
 
-  it("should revert recover chain ID on replay attack", async function () {
-    try {
+    it("should revert recover chain ID on replay attack", async function () {
       const timestamp = 1000;
-      const nonce = 6008;
+      const nonce = 5008;
       const sequence = 57;
       const newChainId = 3;
+      const forkEvmChainId = 999;
       
-      const payload = payloadRecoverChainId(MODULE, EVMCHAINID, newChainId);
-      const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+      // Use current block.chainid in payload
+      const network = await ethers.provider.getNetwork();
+      const currentChainId = network.chainId;
+      
+      const payload = payloadRecoverChainId(MODULE, currentChainId, newChainId);
+      const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
+      
+      // Simulate being on a fork by changing the EVM chain ID
+      await ethers.provider.send("hardhat_setStorageAt", [
+        proxied.address,
+        EVMCHAINID_SLOT,
+        ethers.utils.hexZeroPad(ethers.BigNumber.from(forkEvmChainId).toHexString(), 32)
+      ]);
       
       // First submission should succeed
       await proxied.submitRecoverChainId(vm);
       
-      // Second identical submission should fail (replay attack)
-      proxied.submitRecoverChainId = async () => {
-        throw new Error("replay attack");
-      };
-      
+      // Second identical submission should fail with different error because EVM chain ID was updated
       try {
         await proxied.submitRecoverChainId(vm);
-        throw new Error("Should have reverted on replay attack");
+        throw new Error("Expected transaction to revert");
       } catch (error: any) {
-        expect(error.message).to.include("replay attack");
+        expect(error.message).to.include("not a fork");
       }
-      
-    } catch (error: any) {
-      expect(error.message).to.satisfy((msg: string) => 
-        msg.includes("function") || msg.includes("replay") || msg.includes("consumed")
-      );
-    }
+    });
   });
 
   it("should handle fuzzing for governance operations", async function () {
-    this.timeout(30000);
-
+    this.timeout(180000); // 3 minutes
+    
     const scenarios = [
       { type: "contract upgrade", action: 1 },
       { type: "guardian set update", action: 2 },
@@ -1713,17 +1245,22 @@ describe("Governance", function () {
       { type: "recover chain", action: 5 }
     ];
 
-    for (const scenario of scenarios) {
+    for (let i = 0; i < scenarios.length; i++) {
+      const scenario = scenarios[i];
+      
       try {
         const timestamp = Math.floor(Math.random() * 10000) + 1000;
-        const nonce = Math.floor(Math.random() * 10000) + 1000;
-        const sequence = Math.floor(Math.random() * 1000) + 100;
+        const nonce = Math.floor(Math.random() * 10000) + 7000 + i; // Ensure unique nonces
+        const sequence = Math.floor(Math.random() * 1000) + 100 + i;
 
         // Test different governance payloads
         let payload: string;
         switch (scenario.action) {
           case 1:
-            payload = payloadSubmitContract(MODULE, CHAINID, ethers.Wallet.createRandom().address);
+            const NewImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+            const newImpl = await NewImplFactory.deploy(EVMCHAINID, CHAINID);
+            await newImpl.deployed();
+            payload = payloadSubmitContract(MODULE, CHAINID, newImpl.address);
             break;
           case 2:
             payload = payloadNewGuardianSet(MODULE, CHAINID, 1, [ethers.Wallet.createRandom().address]);
@@ -1732,26 +1269,32 @@ describe("Governance", function () {
             payload = payloadSetMessageFee(MODULE, CHAINID, ethers.utils.parseEther("0.01").toString());
             break;
           case 4:
-            payload = payloadTransferFees(MODULE, CHAINID, ethers.Wallet.createRandom().address, ethers.utils.parseEther("1").toString());
+            payload = payloadTransferFees(MODULE, 0, ethers.Wallet.createRandom().address, ethers.utils.parseEther("1").toString());
             break;
           case 5:
-            payload = payloadRecoverChainId(MODULE, EVMCHAINID, 3);
+            const network = await ethers.provider.getNetwork();
+            payload = payloadRecoverChainId(MODULE, network.chainId, 3);
             break;
           default:
-            payload = payloadSubmitContract(MODULE, CHAINID, ethers.Wallet.createRandom().address);
+            const DefaultImplFactory = await ethers.getContractFactory("MyImplementation", owner);
+            const defaultImpl = await DefaultImplFactory.deploy(EVMCHAINID, CHAINID);
+            await defaultImpl.deployed();
+            payload = payloadSubmitContract(MODULE, CHAINID, defaultImpl.address);
         }
 
-        const vm = createGovernanceVAA(timestamp, nonce, sequence, payload);
+        const vm = createValidVm(0, timestamp, nonce, 1, governanceContract, sequence, 15, payload);
         
         // Test that VM is properly formatted
         expect(vm).to.match(/^0x[0-9a-fA-F]+$/);
         expect(vm.length).to.be.greaterThan(200);
 
-        await new Promise(resolve => setTimeout(resolve, 50));
-      } catch (error) {
-        // Some operations might fail in test environment
+        // Add delay between fuzzing iterations
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+      } catch (error: any) {
+        // Some operations might fail in test environment, which is expected for fuzzing
+        console.log(`Fuzzing scenario ${scenario.type} encountered expected error:`, error?.message || error);
       }
     }
   });
-
 });
