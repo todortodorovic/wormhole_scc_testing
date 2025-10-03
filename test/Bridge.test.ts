@@ -70,9 +70,7 @@ describe("Bridge", function () {
     testChainId = 2;
     governanceChainId = 1;
     
-    console.log("Bridge deployed at:", bridge.address);
-    console.log("WETH deployed at:", weth.address);
-    console.log("Token impl deployed at:", tokenImpl.address);
+  
   });
 
   beforeEach(async function () {
