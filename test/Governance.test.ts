@@ -33,7 +33,7 @@ describe("Governance", function () {
   const testGuardianAddress = "0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe";
 
   before(async function () {
-    this.timeout(60000);
+    this.timeout(120000);
     try {
       const signers = await ethers.getSigners();
       
@@ -47,16 +47,8 @@ describe("Governance", function () {
       // Get current network chain ID for evmChainId
       const network = await ethers.provider.getNetwork();
       EVMCHAINID = network.chainId;
-      
-    } catch (error) {
-      throw error;
-    }
-  });
 
-  beforeEach(async function () {
-    this.timeout(60000);
-    
-    try {
+      // Deploy contracts once for all tests
       // Deploy Setup contract
       const SetupFactory = await ethers.getContractFactory("Setup", owner);
       setup = await SetupFactory.deploy();
@@ -89,9 +81,6 @@ describe("Governance", function () {
 
       // Create proxied implementation instance
       proxied = await ethers.getContractAt("MyImplementation", proxy.address, owner);
-      
-      // Add delay to ensure proper setup
-      await new Promise(resolve => setTimeout(resolve, 200));
       
     } catch (error) {
       console.log("Setup error:", error);
